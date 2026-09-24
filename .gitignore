@@ -1,0 +1,24 @@
+# Environment Variables (Never commit secrets to Git)
+.env
+.env.local
+.env.*.local
+.env.example
+# Node dependencies and build outputs
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Compiler binaries & build files
+*.exe
+*.o
+*.obj
+app.exe
+main.exe
+
+# Editor directories
+.vscode/
+.idea/
+*.suo
+*.user
+.DS_Store
