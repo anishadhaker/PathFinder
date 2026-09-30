@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LeafletMapView from './components/LeafletMapView';
 import NetworkMap from './components/NetworkMap';
 import NavigationPanel from './components/NavigationPanel';
@@ -12,7 +12,12 @@ import NetworkStatus from './components/NetworkStatus';
 import { calculateShortestPath } from './services/shortestPathService';
 import { calculateOsrmRoute } from './services/osrmRoutingService';
 import { fetchNearbyPlacesOsm } from './services/overpassPlacesService';
-import { getCurrentPosition } from './services/geolocationService';
+import {
+  getCurrentPosition,
+  startLiveLocationWatch,
+  stopLiveLocationWatch,
+  calculateDistanceMeters,
+} from './services/geolocationService';
 import { reverseGeocode } from './services/nominatimService';
 import { CITIES } from './data/graphData';
 
@@ -39,6 +44,32 @@ export default function App() {
   const [isLocating, setIsLocating] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [realRouteResult, setRealRouteResult] = useState(null);
+  const [isLiveTracking, setIsLiveTracking] = useState(false);
+
+  // References to preserve latest values in continuous watch callbacks without stale closures
+  const lastRoutedGpsRef = useRef(null);
+  const destinationPlaceRef = useRef(destinationPlace);
+  const travelModeRef = useRef(travelMode);
+  const realRouteResultRef = useRef(realRouteResult);
+
+  useEffect(() => {
+    destinationPlaceRef.current = destinationPlace;
+  }, [destinationPlace]);
+
+  useEffect(() => {
+    travelModeRef.current = travelMode;
+  }, [travelMode]);
+
+  useEffect(() => {
+    realRouteResultRef.current = realRouteResult;
+  }, [realRouteResult]);
+
+  // Clean up active geolocation watch on component unmount
+  useEffect(() => {
+    return () => {
+      stopLiveLocationWatch();
+    };
+  }, []);
 
   // Dijkstra Demo State (10 Cities Graph)
   const [source, setSource] = useState('Jaipur');
@@ -209,28 +240,112 @@ export default function App() {
     setErrorMessage('');
   };
 
-  // Use Browser Geolocation (GPS)
-  const handleUseMyLocation = async () => {
+  // Continuous Live GPS Location Tracking & Movement-Based Rerouting
+  const handleUseMyLocation = () => {
+    // If currently tracking live, toggle tracking OFF
+    if (isLiveTracking) {
+      stopLiveLocationWatch();
+      setIsLiveTracking(false);
+      return;
+    }
+
     setIsLocating(true);
     setErrorMessage('');
-    try {
-      const pos = await getCurrentPosition();
-      setUserGpsCoords(pos);
 
-      // Reverse geocode to get street name
-      const geo = await reverseGeocode(pos.lat, pos.lng);
-      setStartPlace({
-        name: geo.name || 'My Current GPS Location',
-        displayName: geo.displayName,
-        lat: pos.lat,
-        lng: pos.lng,
-      });
-      setCurrentLocationName(geo.name || 'Live GPS Location');
-    } catch (err) {
-      setErrorMessage(err.message);
-    } finally {
-      setIsLocating(false);
-    }
+    let isInitialResolution = true;
+
+    startLiveLocationWatch(
+      async (pos) => {
+        setUserGpsCoords(pos);
+        setIsLocating(false);
+        setIsLiveTracking(true);
+
+        // On first GPS reading, reverse geocode to assign a meaningful address name
+        if (isInitialResolution) {
+          isInitialResolution = false;
+          try {
+            const geo = await reverseGeocode(pos.lat, pos.lng);
+            setStartPlace({
+              name: geo.name || 'My Current GPS Location',
+              displayName: geo.displayName,
+              lat: pos.lat,
+              lng: pos.lng,
+              isGps: true,
+            });
+            setCurrentLocationName(geo.name || 'Live GPS Location');
+            lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
+          } catch (e) {
+            setStartPlace({
+              name: 'My Current GPS Location',
+              lat: pos.lat,
+              lng: pos.lng,
+              isGps: true,
+            });
+            lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
+          }
+          return;
+        }
+
+        // For subsequent continuous GPS updates:
+        // Update current location coordinates
+        setStartPlace((prev) =>
+          prev?.isGps ? { ...prev, lat: pos.lat, lng: pos.lng } : prev
+        );
+
+        // TASK 5: Live Location + Routing
+        // Check if there is an active destination and an existing route
+        const dest = destinationPlaceRef.current;
+        const activeRoute = realRouteResultRef.current;
+
+        if (dest && activeRoute) {
+          const lastRouted = lastRoutedGpsRef.current;
+          const movementMeters = lastRouted
+            ? calculateDistanceMeters(lastRouted.lat, lastRouted.lng, pos.lat, pos.lng)
+            : 100;
+
+          // Only recalculate OSRM when user moves significantly (threshold 40 meters)
+          // to prevent spamming public routing APIs (TASK 5 & TASK 7)
+          if (movementMeters >= 40) {
+            lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
+
+            try {
+              const result = await calculateOsrmRoute({
+                startLat: pos.lat,
+                startLng: pos.lng,
+                endLat: dest.lat,
+                endLng: dest.lng,
+                mode: travelModeRef.current,
+              });
+
+              setRouteCoordinates(result.coordinates);
+              setRealRouteResult({
+                source: 'My Current Location',
+                destination: dest.name,
+                path: ['My Current Location', dest.name],
+                distance: result.distanceKm,
+                stopsCount: 2,
+                travelTime: result.formattedDuration,
+                segments: result.steps.map((st) => ({
+                  from: st.instruction,
+                  to: '',
+                  distance: st.distance,
+                  routeName: st.instruction,
+                })),
+                algorithm: 'Open Source Routing Machine (OSRM)',
+                steps: result.steps,
+              });
+            } catch (rerouteErr) {
+              console.warn('Live GPS auto-reroute skipped:', rerouteErr);
+            }
+          }
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        setIsLiveTracking(false);
+        setErrorMessage(error.message);
+      }
+    );
   };
 
   // Navigate to a Nearby Place
@@ -304,6 +419,7 @@ export default function App() {
           destinationCoords={destinationPlace}
           routeCoordinates={routeCoordinates}
           userGpsCoords={userGpsCoords}
+          isLiveTracking={isLiveTracking}
           nearbyPlaces={nearbyPlaces}
           onNavigateToNearbyPlace={handleNavigateToNearbyPlace}
           darkMode={darkMode}
@@ -387,6 +503,7 @@ export default function App() {
         onTravelModeChange={setTravelMode}
         onUseMyLocation={handleUseMyLocation}
         isLocating={isLocating}
+        isLiveTracking={isLiveTracking}
         // Dijkstra demo props
         source={source}
         destination={destination}

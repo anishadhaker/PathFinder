@@ -55,7 +55,32 @@ export const calculateOsrmRoute = async ({
     const primaryRoute = data.routes[0];
     const distanceMeters = primaryRoute.distance;
     const distanceKm = parseFloat((distanceMeters / 1000).toFixed(1));
-    const durationSeconds = primaryRoute.duration;
+    const rawDurationSeconds = primaryRoute.duration;
+
+    // Determine realistic duration for selected travel mode:
+    // The public OSRM demo server typically runs driving profiles by default.
+    // If the server returns driving speeds for walking or cycling, use client-side speed fallbacks:
+    // Walking: 5 km/h, Cycling: 15 km/h, Driving: OSRM duration.
+    let finalDurationSeconds = rawDurationSeconds;
+    const effectiveSpeedKmH = distanceKm > 0 && rawDurationSeconds > 0
+      ? (distanceKm / (rawDurationSeconds / 3600))
+      : 0;
+
+    if (mode === 'walking') {
+      // If OSRM reported an unrealistic walking speed (> 8 km/h, such as highway car speeds)
+      if (effectiveSpeedKmH > 8 || !rawDurationSeconds) {
+        const walkingSpeedKmH = 5.0; // Standard walking speed: 5 km/h
+        finalDurationSeconds = Math.round((distanceKm / walkingSpeedKmH) * 3600);
+      }
+    } else if (mode === 'cycling') {
+      // If OSRM reported an unrealistic cycling speed (> 22 km/h, such as highway car speeds)
+      if (effectiveSpeedKmH > 22 || !rawDurationSeconds) {
+        const cyclingSpeedKmH = 15.0; // Standard cycling speed: 15 km/h
+        finalDurationSeconds = Math.round((distanceKm / cyclingSpeedKmH) * 3600);
+      }
+    }
+
+    const durationRatio = rawDurationSeconds > 0 ? (finalDurationSeconds / rawDurationSeconds) : 1;
 
     // Convert GeoJSON [longitude, latitude] to Leaflet [latitude, longitude]
     const polylineCoordinates = primaryRoute.geometry.coordinates.map(([lng, lat]) => [
@@ -69,13 +94,14 @@ export const calculateOsrmRoute = async ({
       const type = maneuver.type || 'turn';
       const modifier = maneuver.modifier ? ` ${maneuver.modifier}` : '';
       const street = step.name ? ` onto ${step.name}` : '';
+      const adjustedStepDuration = Math.round(step.duration * durationRatio);
 
       return {
         id: index,
         instruction: `${type.charAt(0).toUpperCase() + type.slice(1)}${modifier}${street}`,
         distance: step.distance < 1000 ? `${Math.round(step.distance)} m` : `${(step.distance / 1000).toFixed(1)} km`,
         distanceMeters: step.distance,
-        duration: formatDuration(step.duration),
+        duration: formatDuration(adjustedStepDuration),
       };
     });
 
@@ -83,8 +109,8 @@ export const calculateOsrmRoute = async ({
       success: true,
       distanceKm,
       distanceMeters,
-      durationSeconds,
-      formattedDuration: formatDuration(durationSeconds),
+      durationSeconds: finalDurationSeconds,
+      formattedDuration: formatDuration(finalDurationSeconds),
       coordinates: polylineCoordinates,
       steps,
       provider: 'Open Source Routing Machine (OSRM)',

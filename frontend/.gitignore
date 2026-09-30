@@ -23,8 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment files with sensitive API keys
+# Environment files
 .env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local

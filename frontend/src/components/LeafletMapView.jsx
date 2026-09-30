@@ -5,6 +5,7 @@ import {
   Marker,
   Popup,
   Polyline,
+  Circle,
   useMap,
 } from 'react-leaflet';
 import L from 'leaflet';
@@ -124,6 +125,7 @@ export default function LeafletMapView({
   destinationCoords,
   routeCoordinates = [],
   userGpsCoords,
+  isLiveTracking = false,
   nearbyPlaces = [],
   onNavigateToNearbyPlace,
   darkMode = false,
@@ -162,19 +164,36 @@ export default function LeafletMapView({
           maxZoom={19}
         />
 
-        {/* User Live GPS Marker */}
+        {/* User Live GPS Marker & Accuracy Circle */}
         {userGpsCoords && (
-          <Marker
-            position={[userGpsCoords.lat, userGpsCoords.lng]}
-            icon={createCustomIcon('gps')}
-          >
-            <Popup>
-              <div className="text-xs">
-                <span className="font-bold text-sky-600">Your Current Position</span>
-                <p className="text-[11px] text-slate-500 mt-0.5">Live Device GPS</p>
-              </div>
-            </Popup>
-          </Marker>
+          <>
+            {userGpsCoords.accuracy && userGpsCoords.accuracy < 2500 && (
+              <Circle
+                center={[userGpsCoords.lat, userGpsCoords.lng]}
+                radius={userGpsCoords.accuracy}
+                pathOptions={{
+                  color: '#0284c7',
+                  fillColor: '#38bdf8',
+                  fillOpacity: 0.12,
+                  weight: 1.5,
+                }}
+              />
+            )}
+            <Marker
+              position={[userGpsCoords.lat, userGpsCoords.lng]}
+              icon={createCustomIcon('gps')}
+            >
+              <Popup>
+                <div className="text-xs">
+                  <span className="font-bold text-sky-600">Your Current Position</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {isLiveTracking ? 'Live location active' : 'Live location stopped'}
+                    {userGpsCoords.accuracy ? ` (±${Math.round(userGpsCoords.accuracy)}m)` : ''}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          </>
         )}
 
         {/* Start Point Marker */}
@@ -278,11 +297,19 @@ export default function LeafletMapView({
       {/* Floating Status Indicator on Map */}
       <div className="pointer-events-none absolute top-4 right-4 z-20 flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/95 px-3.5 py-1.5 shadow-md backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          <span
+            className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+              isLiveTracking ? 'bg-sky-400' : 'bg-emerald-400'
+            }`}
+          />
+          <span
+            className={`relative inline-flex rounded-full h-2 w-2 ${
+              isLiveTracking ? 'bg-sky-500' : 'bg-emerald-500'
+            }`}
+          />
         </span>
         <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
-          OpenStreetMap & OSRM Live
+          {isLiveTracking ? 'Live location active' : 'OpenStreetMap & OSRM Live'}
         </span>
       </div>
     </div>

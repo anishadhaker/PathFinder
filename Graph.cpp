@@ -87,40 +87,32 @@ void Graph::displayRoads() const {
 }
 
 void Graph::loadSampleCityNetwork() {
+    // 10 Academic Regional City Network Nodes
     addLocation("Delhi");
-    addLocation("Gurgaon");
-    addLocation("Noida");
-    addLocation("Faridabad");
-    addLocation("Ghaziabad");
-    addLocation("Rohini");
-    addLocation("Dwarka");
-    addLocation("Saket");
-    addLocation("Karol Bagh");
-    addLocation("Lajpat Nagar");
+    addLocation("Jaipur");
+    addLocation("Ajmer");
+    addLocation("Kota");
+    addLocation("Udaipur");
+    addLocation("Jodhpur");
+    addLocation("Bikaner");
+    addLocation("Agra");
+    addLocation("Chandigarh");
+    addLocation("Amritsar");
 
-    addRoad("Delhi", "Gurgaon", 32);
-    addRoad("Delhi", "Noida", 25);
-    addRoad("Delhi", "Rohini", 12);
-    addRoad("Delhi", "Karol Bagh", 9);
-
-    addRoad("Gurgaon", "Faridabad", 25);
-
-    addRoad("Noida", "Ghaziabad", 15);
-    addRoad("Noida", "Lajpat Nagar", 22);
-
-    addRoad("Faridabad", "Ghaziabad", 30);
-    addRoad("Faridabad", "Saket", 26);
-
-    addRoad("Ghaziabad", "Rohini", 21);
-
-    addRoad("Rohini", "Dwarka", 18);
-    addRoad("Rohini", "Karol Bagh", 11);
-
-    addRoad("Dwarka", "Saket", 14);
-
-    addRoad("Saket", "Lajpat Nagar", 7);
-
-    addRoad("Karol Bagh", "Lajpat Nagar", 9);
+    // 13 Bidirectional Weighted Highway Corridors (Distances in km)
+    addRoad("Delhi", "Jaipur", 280);
+    addRoad("Delhi", "Agra", 230);
+    addRoad("Delhi", "Chandigarh", 245);
+    addRoad("Delhi", "Bikaner", 450);
+    addRoad("Jaipur", "Ajmer", 135);
+    addRoad("Jaipur", "Kota", 250);
+    addRoad("Jaipur", "Jodhpur", 330);
+    addRoad("Ajmer", "Udaipur", 260);
+    addRoad("Ajmer", "Jodhpur", 210);
+    addRoad("Kota", "Udaipur", 290);
+    addRoad("Jodhpur", "Udaipur", 250);
+    addRoad("Jodhpur", "Bikaner", 250);
+    addRoad("Chandigarh", "Amritsar", 225);
 }
 
 bool Graph::findShortestPath(const std::string& source,

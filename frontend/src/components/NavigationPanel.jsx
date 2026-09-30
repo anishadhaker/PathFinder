@@ -34,6 +34,7 @@ export default function NavigationPanel({
   onTravelModeChange,
   onUseMyLocation,
   isLocating = false,
+  isLiveTracking = false,
   // Dijkstra demo props
   source,
   destination,
@@ -191,6 +192,7 @@ export default function NavigationPanel({
                     showGpsButton={true}
                     onUseGps={onUseMyLocation}
                     isLocating={isLocating}
+                    isLiveTracking={isLiveTracking}
                   />
                 ) : (
                   <div className="space-y-1">

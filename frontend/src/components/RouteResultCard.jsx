@@ -11,6 +11,15 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
+const formatDistanceWithUnit = (distanceValue) => {
+  if (distanceValue === null || distanceValue === undefined) return '';
+  const str = String(distanceValue).trim();
+  if (str.endsWith('km') || str.endsWith('m') || str.endsWith('mi')) {
+    return str;
+  }
+  return `${str} km`;
+};
+
 export default function RouteResultCard({
   routeResult,
   onOpenDetails,
@@ -19,6 +28,12 @@ export default function RouteResultCard({
   darkMode = false,
 }) {
   if (!routeResult) return null;
+
+  const isOsrm = Boolean(
+    routeResult.algorithm?.toLowerCase().includes('osrm') ||
+    routeResult.algorithmType === 'osrm' ||
+    routeResult.provider?.toLowerCase().includes('osrm')
+  );
 
   return (
     <div className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[540px] z-30 animate-in fade-in slide-in-from-bottom-5 duration-300">
@@ -35,18 +50,20 @@ export default function RouteResultCard({
                   Optimal Route
                 </h3>
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/60 dark:text-emerald-300">
-                  Shortest Path Found
+                  {isOsrm ? 'Real Route Found' : 'Shortest Path Found'}
                 </span>
               </div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                Calculated via Dijkstra's Algorithm
+                {isOsrm
+                  ? 'Calculated via Open Source Routing Machine (OSRM)'
+                  : "Calculated via Dijkstra's Algorithm"}
               </p>
             </div>
           </div>
 
           <div className="text-right">
             <div className="text-2xl font-black text-sky-600 dark:text-sky-400 leading-tight">
-              {routeResult.distance} <span className="text-sm font-semibold">km</span>
+              {formatDistanceWithUnit(routeResult.distance)}
             </div>
             <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
               Total Distance
@@ -82,7 +99,7 @@ export default function RouteResultCard({
                 {idx < routeResult.path.length - 1 && (
                   <div className="flex flex-col items-center shrink-0 px-1">
                     <span className="text-[9px] font-bold text-sky-600 dark:text-sky-400">
-                      {routeResult.segments[idx]?.distance} km
+                      {formatDistanceWithUnit(routeResult.segments[idx]?.distance)}
                     </span>
                     <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                   </div>

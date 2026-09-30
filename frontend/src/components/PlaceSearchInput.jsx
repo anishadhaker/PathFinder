@@ -13,6 +13,7 @@ export default function PlaceSearchInput({
   showGpsButton = false,
   onUseGps,
   isLocating = false,
+  isLiveTracking = false,
 }) {
   const [query, setQuery] = useState(selectedPlace ? selectedPlace.name : '');
   const [suggestions, setSuggestions] = useState([]);
@@ -99,10 +100,23 @@ export default function PlaceSearchInput({
             type="button"
             onClick={onUseGps}
             disabled={isLocating}
-            className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition"
+            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition ${
+              isLiveTracking
+                ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
+                : 'text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300'
+            }`}
+            title={isLiveTracking ? 'Live GPS is actively updating your position. Click to toggle.' : 'Track live location with GPS'}
           >
-            <Crosshair className={`h-3 w-3 ${isLocating ? 'animate-spin' : ''}`} />
-            {isLocating ? 'Locating...' : 'Use My GPS'}
+            <Crosshair
+              className={`h-3 w-3 ${
+                isLocating ? 'animate-spin' : isLiveTracking ? 'animate-pulse text-emerald-500' : ''
+              }`}
+            />
+            {isLocating
+              ? 'Locating...'
+              : isLiveTracking
+              ? 'Live GPS (Active)'
+              : 'Use My GPS'}
           </button>
         )}
       </div>

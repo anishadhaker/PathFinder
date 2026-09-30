@@ -12,8 +12,25 @@ import {
   Route,
 } from 'lucide-react';
 
+const formatDistanceWithUnit = (distanceValue) => {
+  if (distanceValue === null || distanceValue === undefined) return '';
+  const str = String(distanceValue).trim();
+  if (str.endsWith('km') || str.endsWith('m') || str.endsWith('mi')) {
+    return str;
+  }
+  return `${str} km`;
+};
+
 export default function RouteDetailsDrawer({ isOpen, onClose, routeResult, darkMode = false }) {
   if (!isOpen || !routeResult) return null;
+
+  const isOsrm = Boolean(
+    routeResult.algorithm?.toLowerCase().includes('osrm') ||
+    routeResult.algorithmType === 'osrm' ||
+    routeResult.provider?.toLowerCase().includes('osrm')
+  );
+  const algorithmBadge = isOsrm ? 'OSRM' : 'Dijkstra';
+  const algorithmDisplayName = isOsrm ? 'Algorithm: OSRM' : 'Algorithm: Dijkstra';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
@@ -87,7 +104,7 @@ export default function RouteDetailsDrawer({ isOpen, onClose, routeResult, darkM
                   Algorithm
                 </span>
                 <div className="mt-0.5 text-xs font-black text-emerald-600 dark:text-emerald-400 mt-2">
-                  Dijkstra
+                  {algorithmDisplayName}
                 </div>
               </div>
             </div>
@@ -136,14 +153,18 @@ export default function RouteDetailsDrawer({ isOpen, onClose, routeResult, darkM
                         Step {idx + 2} • Highway Transit
                       </span>
                       <span className="rounded-md bg-sky-50 px-2 py-0.5 text-xs font-black text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
-                        {seg.distance} km
+                        {formatDistanceWithUnit(seg.distance)}
                       </span>
                     </div>
 
                     <div className="mt-1 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
                       <span>{seg.from}</span>
-                      <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
-                      <span>{seg.to}</span>
+                      {seg.to && (
+                        <>
+                          <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                          <span>{seg.to}</span>
+                        </>
+                      )}
                     </div>
 
                     <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -164,14 +185,14 @@ export default function RouteDetailsDrawer({ isOpen, onClose, routeResult, darkM
                       Step {routeResult.segments.length + 2} • Final Arrival
                     </span>
                     <span className="text-xs font-black text-violet-700 dark:text-violet-300">
-                      Total: {routeResult.distance} km
+                      Total: {formatDistanceWithUnit(routeResult.distance)}
                     </span>
                   </div>
                   <div className="mt-1 text-base font-extrabold text-slate-900 dark:text-white">
                     Arrive at {routeResult.destination}
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Target destination reached along optimal graph route.
+                    Target destination reached along optimal {algorithmBadge} route.
                   </p>
                 </div>
               </div>
@@ -185,22 +206,38 @@ export default function RouteDetailsDrawer({ isOpen, onClose, routeResult, darkM
               <span>B.Tech CSE Viva Explanation Note</span>
             </div>
 
-            <div className="mt-2.5 text-xs text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed">
-              <p>
-                <strong>Algorithm:</strong> Dijkstra's Single-Source Shortest Path algorithm on a non-negative weighted graph \(G = (V, E)\).
-              </p>
-              <div className="rounded-xl bg-white p-2.5 font-mono text-[11px] text-slate-800 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-                Relaxation: if (dist[u] + weight(u, v) &lt; dist[v]) {'{\n'}
-                {'  '}dist[v] = dist[u] + weight(u, v);{'\n'}
-                {'  '}prev[v] = u;{'\n'}
-                {'}'}
+            {isOsrm ? (
+              <div className="mt-2.5 text-xs text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed">
+                <p>
+                  <strong>Routing Engine:</strong> Open Source Routing Machine (OSRM) using Contraction Hierarchies (CH) / Multi-Level Dijkstra over real OpenStreetMap road network graphs.
+                </p>
+                <div className="rounded-xl bg-white p-2.5 font-mono text-[11px] text-slate-800 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                  Real-World Routing: OpenStreetMap Ways &amp; Nodes {'\n'}
+                  Query: Bidirectional CH search over pre-processed graph hierarchy{'\n'}
+                  Output: Accurate road geometry, turn-by-turn maneuvers, &amp; distance
+                </div>
+                <p>
+                  <strong>Complexity:</strong> Sub-millisecond query time \(O(1)\) to \(O(\log V)\) on continental road graphs via precomputed shortcut hierarchies.
+                </p>
               </div>
-              <p>
-                <strong>Time Complexity:</strong> \(\mathcal{O}((V + E) \log V)\) using Min-Priority Queue.
-                <br />
-                <strong>Space Complexity:</strong> \(\mathcal{O}(V + E)\) for adjacency list representation.
-              </p>
-            </div>
+            ) : (
+              <div className="mt-2.5 text-xs text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed">
+                <p>
+                  <strong>Algorithm:</strong> Dijkstra's Single-Source Shortest Path algorithm on a non-negative weighted graph \(G = (V, E)\).
+                </p>
+                <div className="rounded-xl bg-white p-2.5 font-mono text-[11px] text-slate-800 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                  Relaxation: if (dist[u] + weight(u, v) &lt; dist[v]) {'{\n'}
+                  {'  '}dist[v] = dist[u] + weight(u, v);{'\n'}
+                  {'  '}prev[v] = u;{'\n'}
+                  {'}'}
+                </div>
+                <p>
+                  <strong>Time Complexity:</strong> \(\mathcal{O}((V + E) \log V)\) using Min-Priority Queue.
+                  <br />
+                  <strong>Space Complexity:</strong> \(\mathcal{O}(V + E)\) for adjacency list representation.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
