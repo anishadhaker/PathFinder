@@ -110,7 +110,7 @@ export default function RouteResultCard({
         </div>
 
         {/* Key Stats Chips */}
-        <div className="mt-3.5 grid grid-cols-3 gap-2">
+        <div className="mt-3.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-2.5 text-center dark:border-slate-800 dark:bg-slate-850/50">
             <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <Compass className="h-3 w-3 text-sky-500" />
@@ -133,11 +133,21 @@ export default function RouteResultCard({
 
           <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-2.5 text-center dark:border-slate-800 dark:bg-slate-850/50">
             <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <Sparkles className="h-3 w-3 text-sky-500" />
-              Algorithm
+              <Sparkles className="h-3 w-3 text-emerald-500" />
+              Nodes Visited
             </div>
-            <div className="mt-1 text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-              Dijkstra
+            <div className="mt-1 text-sm font-extrabold text-slate-800 dark:text-slate-100">
+              {routeResult.stats?.nodesVisited ?? routeResult.stopsCount}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-2.5 text-center dark:border-slate-800 dark:bg-slate-850/50">
+            <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <Sparkles className="h-3 w-3 text-sky-500" />
+              Steps
+            </div>
+            <div className="mt-1 text-sm font-extrabold text-slate-800 dark:text-slate-100">
+              {routeResult.stats?.executionSteps ?? routeResult.stopsCount}
             </div>
           </div>
         </div>

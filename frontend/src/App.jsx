@@ -1,37 +1,185 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LeafletMapView from './components/LeafletMapView';
-import NetworkMap from './components/NetworkMap';
+import DijkstraGraphView from './components/DijkstraGraphView';
+import DijkstraProgressPanel from './components/DijkstraProgressPanel';
 import NavigationPanel from './components/NavigationPanel';
 import RouteResultCard from './components/RouteResultCard';
 import RouteDetailsDrawer from './components/RouteDetailsDrawer';
-import AlgorithmProgress from './components/AlgorithmProgress';
-import MapControls from './components/MapControls';
-import NetworkStatus from './components/NetworkStatus';
 import LocationPermissionModal from './components/LocationPermissionModal';
+import { Route as RouteIcon, Globe2, Compass } from 'lucide-react';
 
 // Services
-import { calculateShortestPath } from './services/shortestPathService';
+import {
+  calculateShortestPath,
+  generateDijkstraSteps,
+} from './services/shortestPathService';
 import { calculateOsrmRoute } from './services/osrmRoutingService';
 import { fetchNearbyPlacesOsm } from './services/overpassPlacesService';
 import {
-  getCurrentPosition,
   startLiveLocationWatch,
   stopLiveLocationWatch,
   calculateDistanceMeters,
-  checkLocationPermissionStatus,
   subscribeToPermissionChanges,
 } from './services/geolocationService';
 import { reverseGeocode } from './services/nominatimService';
 import { CITIES } from './data/graphData';
 
 export default function App() {
-  // Mode: 'real_world' (OpenStreetMap & OSRM) | 'dijkstra_demo' (Academic Dijkstra)
-  const [appMode, setAppMode] = useState('real_world');
+  // App Mode: PRIMARY Academic Dijkstra Mode vs Supporting Real-World Mode
+  const [appMode, setAppMode] = useState('dijkstra_demo');
 
-  // Navigation Mode Tab: 'navigation' | 'nearby'
+  // Navigation Mode Tab for Real-World: 'navigation' | 'nearby'
   const [activeTab, setActiveTab] = useState('navigation');
 
-  // Real-World Navigation State (OSRM & Nominatim)
+  // ==========================================
+  // 1. DIJKSTRA ALGORITHM STATE & PLAYBACK
+  // ==========================================
+  const [source, setSource] = useState('Jaipur');
+  const [destination, setDestination] = useState('Udaipur');
+  const [dijkstraRoute, setDijkstraRoute] = useState(null);
+  const [dijkstraSteps, setDijkstraSteps] = useState([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+  const [isDijkstraPlaying, setIsDijkstraPlaying] = useState(false);
+  const [isDijkstraPaused, setIsDijkstraPaused] = useState(false);
+  const [animationSpeed, setAnimationSpeed] = useState(600); // 1200ms, 600ms, 200ms
+  const playbackTimerRef = useRef(null);
+
+  // Initialize Jaipur -> Udaipur on mount so graph & distance table are instantly populated
+  useEffect(() => {
+    try {
+      const { steps, finalResult } = generateDijkstraSteps('Jaipur', 'Udaipur');
+      setDijkstraSteps(steps);
+      setDijkstraRoute(finalResult);
+      setCurrentStepIndex(steps.length - 1);
+    } catch (e) {
+      console.warn('Initial Dijkstra load failed:', e);
+    }
+  }, []);
+
+  // Timer loop for step-by-step animation
+  useEffect(() => {
+    if (isDijkstraPlaying && !isDijkstraPaused) {
+      if (currentStepIndex >= 0 && currentStepIndex < dijkstraSteps.length - 1) {
+        playbackTimerRef.current = setTimeout(() => {
+          setCurrentStepIndex((prev) => prev + 1);
+        }, animationSpeed);
+      } else if (currentStepIndex >= dijkstraSteps.length - 1) {
+        setIsDijkstraPlaying(false);
+        setIsDijkstraPaused(false);
+      }
+    }
+    return () => {
+      if (playbackTimerRef.current) clearTimeout(playbackTimerRef.current);
+    };
+  }, [isDijkstraPlaying, isDijkstraPaused, currentStepIndex, dijkstraSteps, animationSpeed]);
+
+  const handleRunDijkstra = () => {
+    setErrorMessage('');
+    if (!source || !destination) {
+      setErrorMessage('Please select both a source and destination location.');
+      return;
+    }
+    if (playbackTimerRef.current) clearTimeout(playbackTimerRef.current);
+    try {
+      const { steps, finalResult } = generateDijkstraSteps(source, destination);
+      setDijkstraSteps(steps);
+      setDijkstraRoute(finalResult);
+      setCurrentStepIndex(0);
+      setIsDijkstraPlaying(true);
+      setIsDijkstraPaused(false);
+    } catch (err) {
+      setErrorMessage(err.message || 'Dijkstra execution failed.');
+    }
+  };
+
+  const handlePauseDijkstra = () => {
+    setIsDijkstraPlaying(false);
+    setIsDijkstraPaused(true);
+  };
+
+  const handleResumeDijkstra = () => {
+    setIsDijkstraPlaying(true);
+    setIsDijkstraPaused(false);
+  };
+
+  const handleResetDijkstra = () => {
+    if (playbackTimerRef.current) clearTimeout(playbackTimerRef.current);
+    setIsDijkstraPlaying(false);
+    setIsDijkstraPaused(false);
+    try {
+      const { steps, finalResult } = generateDijkstraSteps(source, destination);
+      setDijkstraSteps(steps);
+      setDijkstraRoute(finalResult);
+      setCurrentStepIndex(0);
+    } catch (e) {
+      setDijkstraSteps([]);
+      setCurrentStepIndex(-1);
+      setDijkstraRoute(null);
+    }
+    setErrorMessage('');
+  };
+
+  const handleRunInstantly = () => {
+    setErrorMessage('');
+    if (!source || !destination) {
+      setErrorMessage('Please select both a source and destination location.');
+      return;
+    }
+    if (playbackTimerRef.current) clearTimeout(playbackTimerRef.current);
+    try {
+      const { steps, finalResult } = generateDijkstraSteps(source, destination);
+      setDijkstraSteps(steps);
+      setDijkstraRoute(finalResult);
+      setCurrentStepIndex(steps.length - 1);
+      setIsDijkstraPlaying(false);
+      setIsDijkstraPaused(false);
+    } catch (err) {
+      setErrorMessage(err.message || 'Dijkstra execution failed.');
+    }
+  };
+
+  const handleSwapDijkstra = () => {
+    const temp = source;
+    setSource(destination);
+    setDestination(temp);
+    if (playbackTimerRef.current) clearTimeout(playbackTimerRef.current);
+    setIsDijkstraPlaying(false);
+    setIsDijkstraPaused(false);
+    try {
+      const { steps, finalResult } = generateDijkstraSteps(destination, temp);
+      setDijkstraSteps(steps);
+      setDijkstraRoute(finalResult);
+      setCurrentStepIndex(0);
+    } catch (e) {}
+  };
+
+  const handleSelectGraphNode = (cityName) => {
+    if (!source || (source && destination && currentStepIndex === dijkstraSteps.length - 1)) {
+      setSource(cityName);
+      setDestination('');
+      handleResetDijkstra();
+    } else if (source && !destination) {
+      setDestination(cityName);
+      try {
+        const { steps, finalResult } = generateDijkstraSteps(source, cityName);
+        setDijkstraSteps(steps);
+        setDijkstraRoute(finalResult);
+        setCurrentStepIndex(0);
+      } catch (e) {}
+    } else {
+      setDestination(cityName);
+      try {
+        const { steps, finalResult } = generateDijkstraSteps(source, cityName);
+        setDijkstraSteps(steps);
+        setDijkstraRoute(finalResult);
+        setCurrentStepIndex(0);
+      } catch (e) {}
+    }
+  };
+
+  // ==========================================
+  // 2. REAL-WORLD NAVIGATION & LIVE GPS STATE
+  // ==========================================
   const [startPlace, setStartPlace] = useState({
     name: 'Jaipur, Rajasthan',
     lat: 26.9124,
@@ -51,7 +199,6 @@ export default function App() {
   const [locationError, setLocationError] = useState(null);
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
 
-  // References to preserve latest values in continuous watch callbacks without stale closures
   const lastRoutedGpsRef = useRef(null);
   const isReroutingRef = useRef(false);
   const destinationPlaceRef = useRef(destinationPlace);
@@ -77,7 +224,7 @@ export default function App() {
     };
   }, []);
 
-  // Subscribe to browser permission state changes (e.g., user enables permission in Chrome site settings)
+  // Subscribe to browser permission state changes
   useEffect(() => {
     const unsubscribe = subscribeToPermissionChanges((newState) => {
       if (newState === 'granted') {
@@ -102,11 +249,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Dijkstra Demo State (10 Cities Graph)
-  const [source, setSource] = useState('Jaipur');
-  const [destination, setDestination] = useState('Udaipur');
-  const [dijkstraRoute, setDijkstraRoute] = useState(null);
-
   // Shared Calculation & Error State
   const [isCalculating, setIsCalculating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -124,14 +266,10 @@ export default function App() {
 
   // Modals & Panels
   const [isRouteDetailsOpen, setIsRouteDetailsOpen] = useState(false);
-  const [showAlgorithmPanel, setShowAlgorithmPanel] = useState(false);
 
-  // Theme & Map View State
+  // Theme & View State
   const [darkMode, setDarkMode] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
 
-  // Sync dark class on document element
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -151,31 +289,31 @@ export default function App() {
       lat: centerLat,
       lng: centerLng,
       category: selectedCategory,
+      radiusMeters: 5000,
     })
       .then((places) => {
         if (!isCancelled) {
           setNearbyPlaces(places);
+          setIsFetchingNearby(false);
         }
       })
-      .catch(() => {
-        if (!isCancelled) setNearbyPlaces([]);
-      })
-      .finally(() => {
-        if (!isCancelled) setIsFetchingNearby(false);
+      .catch((err) => {
+        if (!isCancelled) {
+          setIsFetchingNearby(false);
+        }
       });
 
     return () => {
       isCancelled = true;
     };
-  }, [selectedCategory, startPlace, userGpsCoords]);
+  }, [selectedCategory, userGpsCoords, startPlace]);
 
-  // Handle Route Calculation for either Real-World OSRM or Dijkstra Demo
+  // Real-world OSRM routing
   const handleCalculateRoute = async () => {
     setErrorMessage('');
     setIsCalculating(true);
 
     if (appMode === 'real_world') {
-      // Real-World Mode: OSRM Routing
       if (!startPlace || !destinationPlace) {
         setErrorMessage('Please enter and select both a starting location and destination.');
         setIsCalculating(false);
@@ -209,7 +347,6 @@ export default function App() {
           steps: result.steps,
         });
 
-        // Add to recent searches
         setRecentSearches((prev) => [
           {
             source: startPlace.name,
@@ -225,37 +362,10 @@ export default function App() {
       } finally {
         setIsCalculating(false);
       }
-    } else {
-      // Dijkstra Demo Mode
-      if (!source || !destination) {
-        setErrorMessage('Please select both a starting city and destination.');
-        setIsCalculating(false);
-        return;
-      }
-      if (source === destination) {
-        setErrorMessage('Starting city and destination cannot be identical.');
-        setIsCalculating(false);
-        return;
-      }
-
-      setShowAlgorithmPanel(true);
-      try {
-        const result = await calculateShortestPath({ source, destination });
-        setDijkstraRoute(result);
-        setRecentSearches((prev) => [
-          { source, destination, distance: result.distance },
-          ...prev.slice(0, 5),
-        ]);
-      } catch (err) {
-        setDijkstraRoute(null);
-        setErrorMessage(err.message || 'Dijkstra route calculation failed.');
-      } finally {
-        setIsCalculating(false);
-      }
     }
   };
 
-  // Swap locations
+  // Swap locations for real-world mode
   const handleSwap = () => {
     if (appMode === 'real_world') {
       const temp = startPlace;
@@ -264,24 +374,20 @@ export default function App() {
       setRouteCoordinates([]);
       setRealRouteResult(null);
     } else {
-      setSource(destination);
-      setDestination(source);
-      setDijkstraRoute(null);
+      handleSwapDijkstra();
     }
     setErrorMessage('');
   };
 
-  // Stop continuous live GPS tracking and clear watch
+  // Stop continuous live GPS tracking
   const handleStopLiveLocation = () => {
     stopLiveLocationWatch();
     setIsLiveTracking(false);
     setIsLocating(false);
-    // Preserves userGpsCoords and startPlace so the last position remains on the map as a static point
   };
 
   // Continuous Live GPS Location Tracking using watchPosition()
   const handleUseMyLocation = () => {
-    // If currently tracking live, toggle tracking OFF
     if (isLiveTracking) {
       handleStopLiveLocation();
       return;
@@ -295,13 +401,11 @@ export default function App() {
 
     startLiveLocationWatch(
       async (pos) => {
-        // Continuous state updates on every GPS tick
         setUserGpsCoords(pos);
         setIsLocating(false);
         setIsLiveTracking(true);
-        setLocationError(null); // Clear any prior permission error
+        setLocationError(null);
 
-        // 1. Initial GPS fix: reverse geocode for a friendly name and trigger initial route if destination already selected
         if (isInitialFix) {
           isInitialFix = false;
           lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
@@ -325,7 +429,6 @@ export default function App() {
             });
           }
 
-          // If user already has a destination selected, calculate initial route immediately
           const dest = destinationPlaceRef.current;
           if (dest && dest.lat && dest.lng) {
             try {
@@ -364,36 +467,28 @@ export default function App() {
           return;
         }
 
-        // 2. Subsequent continuous GPS updates:
-        // Update current location coordinates without triggering full address re-resolution
         setStartPlace((prev) =>
           prev?.isGps ? { ...prev, lat: pos.lat, lng: pos.lng } : prev
         );
 
-        // 3. Live Navigation Rerouting with 40-Meter Movement Threshold
         const dest = destinationPlaceRef.current;
-        // If NO destination is selected, do NOT call OSRM (Requirement 8 & 9)
         if (!dest || !dest.lat || !dest.lng) {
           return;
         }
 
-        // Check if user has moved at least 40 meters from the last routed position
         const lastRouted = lastRoutedGpsRef.current;
         const movementMeters = lastRouted
           ? calculateDistanceMeters(lastRouted.lat, lastRouted.lng, pos.lat, pos.lng)
           : 999;
 
-        // If movement is under 40 meters, only the live marker position is updated
         if (movementMeters < 40) {
           return;
         }
 
-        // Avoid concurrent requests if an OSRM calculation is already in-flight
         if (isReroutingRef.current) {
           return;
         }
 
-        // User moved >= 40m: trigger OSRM recalculation
         lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
         isReroutingRef.current = true;
 
@@ -430,7 +525,6 @@ export default function App() {
         }
       },
       (error) => {
-        // Handle GPS errors according to Requirement 11
         if (error.isPermissionDenied) {
           stopLiveLocationWatch();
           setIsLocating(false);
@@ -438,7 +532,6 @@ export default function App() {
           setLocationError(error);
           setErrorMessage(error.friendlyMessage || error.message);
         } else if (error.isTransient) {
-          // If tracking was already running, do NOT terminate the watcher for temporary GPS timeout
           if (!lastRoutedGpsRef.current) {
             stopLiveLocationWatch();
             setIsLocating(false);
@@ -468,7 +561,6 @@ export default function App() {
         lng: place.lng,
       });
       setActiveTab('navigation');
-      // If we already have a starting place, trigger route
       if (startPlace) {
         calculateOsrmRoute({
           startLat: startPlace.lat,
@@ -499,11 +591,9 @@ export default function App() {
           .catch((err) => setErrorMessage(err.message));
       }
     } else {
-      // In Dijkstra demo mode: map to parent node
       const target = place.graphNode || 'Jaipur';
       setDestination(target);
-      setActiveTab('navigation');
-      calculateShortestPath({ source, destination: target }).then((res) => setDijkstraRoute(res));
+      handleRunInstantly();
     }
   };
 
@@ -513,7 +603,7 @@ export default function App() {
       setRouteCoordinates([]);
       setRealRouteResult(null);
     } else {
-      setDijkstraRoute(null);
+      handleResetDijkstra();
     }
     setErrorMessage('');
   };
@@ -523,177 +613,178 @@ export default function App() {
 
   return (
     <div className={`relative h-screen w-screen overflow-hidden ${darkMode ? 'dark bg-[#0b1120]' : 'bg-[#f4f7fb]'}`}>
-      {/* 1. FULL-SCREEN MAP CANVAS: Leaflet (Real-World) or NetworkMap (Dijkstra) */}
-      {appMode === 'real_world' ? (
-        <LeafletMapView
-          startCoords={startPlace}
-          destinationCoords={destinationPlace}
-          routeCoordinates={routeCoordinates}
-          userGpsCoords={userGpsCoords}
-          isLiveTracking={isLiveTracking}
-          nearbyPlaces={nearbyPlaces}
-          onNavigateToNearbyPlace={handleNavigateToNearbyPlace}
-          darkMode={darkMode}
-          mapCenter={
-            startPlace ? [startPlace.lat, startPlace.lng] : [26.9124, 75.7873]
-          }
-          zoom={12}
-        />
+      {/* 1. MAIN WORKSPACE BASED ON APP MODE */}
+      {appMode === 'dijkstra_demo' ? (
+        <div className="relative h-full w-full flex overflow-hidden">
+          {/* Left Dijkstra Progress & Control Panel */}
+          <div className="w-full sm:w-[420px] lg:w-[460px] h-full z-20 shrink-0 shadow-2xl">
+            <DijkstraProgressPanel
+              source={source}
+              destination={destination}
+              onSourceChange={(city) => {
+                setSource(city);
+                handleResetDijkstra();
+              }}
+              onDestinationChange={(city) => {
+                setDestination(city);
+                handleResetDijkstra();
+              }}
+              onSwap={handleSwapDijkstra}
+              currentStep={dijkstraSteps[currentStepIndex] || null}
+              currentStepIndex={currentStepIndex}
+              totalSteps={dijkstraSteps.length}
+              isPlaying={isDijkstraPlaying}
+              isPaused={isDijkstraPaused}
+              isComplete={currentStepIndex === dijkstraSteps.length - 1 && dijkstraSteps.length > 0}
+              speed={animationSpeed}
+              onSpeedChange={setAnimationSpeed}
+              onRun={handleRunDijkstra}
+              onPause={handlePauseDijkstra}
+              onResume={handleResumeDijkstra}
+              onReset={handleResetDijkstra}
+              onRunInstantly={handleRunInstantly}
+              finalResult={dijkstraRoute}
+              errorMessage={errorMessage}
+              darkMode={darkMode}
+            />
+          </div>
+
+          {/* Center / Right Dijkstra Graph Canvas */}
+          <div className="hidden sm:block flex-1 h-full relative">
+            <DijkstraGraphView
+              source={source}
+              destination={destination}
+              currentStep={dijkstraSteps[currentStepIndex] || null}
+              finalPath={
+                currentStepIndex === dijkstraSteps.length - 1 && dijkstraRoute
+                  ? dijkstraRoute.path
+                  : []
+              }
+              onSelectNode={handleSelectGraphNode}
+              darkMode={darkMode}
+            />
+          </div>
+        </div>
       ) : (
-        <NetworkMap
-          source={source}
-          destination={destination}
-          activeRoute={dijkstraRoute}
-          activeTab={activeTab}
-          selectedCityForNearby={selectedCityForNearby}
-          nearbyPlaces={nearbyPlaces}
-          selectedCategory={selectedCategory}
-          onSelectCity={(cityName) => {
-            if (!source || (source && destination)) {
-              setSource(cityName);
-              setDestination('');
-            } else {
-              setDestination(cityName);
+        /* Real-World Navigation Mode */
+        <div className="relative h-full w-full">
+          <LeafletMapView
+            startCoords={startPlace}
+            destinationCoords={destinationPlace}
+            routeCoordinates={routeCoordinates}
+            userGpsCoords={userGpsCoords}
+            isLiveTracking={isLiveTracking}
+            nearbyPlaces={nearbyPlaces}
+            onNavigateToNearbyPlace={handleNavigateToNearbyPlace}
+            darkMode={darkMode}
+            mapCenter={
+              startPlace ? [startPlace.lat, startPlace.lng] : [26.9124, 75.7873]
             }
-          }}
-          onNavigateToPlace={handleNavigateToNearbyPlace}
-          darkMode={darkMode}
-          zoom={zoom}
-          pan={pan}
-          onPanChange={setPan}
-          onResetView={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-          }}
-        />
+            zoom={12}
+          />
+
+          <NavigationPanel
+            appMode={appMode}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            startPlace={startPlace}
+            destinationPlace={destinationPlace}
+            onSelectStartPlace={setStartPlace}
+            onSelectDestinationPlace={setDestinationPlace}
+            onClearStartPlace={() => setStartPlace(null)}
+            onClearDestinationPlace={() => setDestinationPlace(null)}
+            travelMode={travelMode}
+            onTravelModeChange={setTravelMode}
+            onUseMyLocation={handleUseMyLocation}
+            onStopLiveLocation={handleStopLiveLocation}
+            isLocating={isLocating}
+            isLiveTracking={isLiveTracking}
+            locationError={locationError}
+            onOpenPermissionHelp={() => setIsPermissionModalOpen(true)}
+            onDismissLocationError={() => setLocationError(null)}
+            source={source}
+            destination={destination}
+            onSourceChange={setSource}
+            onDestinationChange={setDestination}
+            onSwap={handleSwap}
+            onCalculateRoute={handleCalculateRoute}
+            isCalculating={isCalculating}
+            errorMessage={errorMessage}
+            onClearError={() => setErrorMessage('')}
+            activeRoute={currentActiveRoute}
+            onResetRoute={handleResetRoute}
+            recentSearches={recentSearches}
+            onSelectRecentSearch={(item) => {
+              setStartPlace({ name: item.source, lat: 26.9124, lng: 75.7873 });
+              setDestinationPlace({ name: item.destination, lat: 24.5854, lng: 73.7125 });
+            }}
+            selectedCityForNearby={selectedCityForNearby}
+            onCityChangeForNearby={setSelectedCityForNearby}
+            onUseCurrentLocation={handleUseMyLocation}
+            isDetectingLocation={isLocating || isFetchingNearby}
+            currentLocationName={currentLocationName}
+            selectedCategory={selectedCategory}
+            onCategoryChange={setSelectedCategory}
+            nearbyPlaces={nearbyPlaces}
+            onNavigateToPlace={handleNavigateToNearbyPlace}
+            darkMode={darkMode}
+          />
+        </div>
       )}
 
-      {/* 2. TOP DUAL-MODE SWITCHER & STATUS BADGE */}
-      <div className="fixed top-4 left-4 sm:left-[435px] z-20 hidden md:flex items-center gap-3">
-        <div className="flex items-center rounded-2xl border border-slate-200/90 bg-white/95 p-1 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
+      {/* 2. TOP PRIMARY / DUAL-MODE SWITCHER */}
+      <div className="fixed top-4 left-4 sm:left-[475px] z-30 flex items-center gap-3">
+        <div className="flex items-center rounded-2xl border border-slate-200/90 bg-white/95 p-1 shadow-xl backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
+          <button
+            type="button"
+            onClick={() => setAppMode('dijkstra_demo')}
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-black transition-all ${
+              appMode === 'dijkstra_demo'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <RouteIcon className="h-3.5 w-3.5" />
+            <span>Dijkstra Shortest Path (Academic Core)</span>
+          </button>
           <button
             type="button"
             onClick={() => setAppMode('real_world')}
-            className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
               appMode === 'real_world'
                 ? 'bg-slate-900 text-white shadow-sm dark:bg-sky-500 dark:text-white'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
           >
-            <span>🌐 Real-World Navigation (OSM & OSRM)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setAppMode('dijkstra_demo')}
-            className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-              appMode === 'dijkstra_demo'
-                ? 'bg-slate-900 text-white shadow-sm dark:bg-sky-500 dark:text-white'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            <span>📐 Dijkstra Demonstration (10 Cities)</span>
+            <Globe2 className="h-3.5 w-3.5" />
+            <span>Real-World Navigation (OSM/OSRM)</span>
           </button>
         </div>
 
-        {appMode === 'dijkstra_demo' && <NetworkStatus darkMode={darkMode} />}
+        {/* Dark Mode Toggle */}
+        <button
+          type="button"
+          onClick={() => setDarkMode(!darkMode)}
+          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200/90 bg-white/95 text-slate-700 shadow-lg backdrop-blur-md hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-200"
+          title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {darkMode ? '☀️' : '🌙'}
+        </button>
       </div>
 
-      {/* 3. LEFT FLOATING NAVIGATION & NEARBY PANEL */}
-      <NavigationPanel
-        appMode={appMode}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        // Real-world props
-        startPlace={startPlace}
-        destinationPlace={destinationPlace}
-        onSelectStartPlace={setStartPlace}
-        onSelectDestinationPlace={setDestinationPlace}
-        onClearStartPlace={() => setStartPlace(null)}
-        onClearDestinationPlace={() => setDestinationPlace(null)}
-        travelMode={travelMode}
-        onTravelModeChange={setTravelMode}
-        onUseMyLocation={handleUseMyLocation}
-        onStopLiveLocation={handleStopLiveLocation}
-        isLocating={isLocating}
-        isLiveTracking={isLiveTracking}
-        locationError={locationError}
-        onOpenPermissionHelp={() => setIsPermissionModalOpen(true)}
-        onDismissLocationError={() => setLocationError(null)}
-        // Dijkstra demo props
-        source={source}
-        destination={destination}
-        onSourceChange={setSource}
-        onDestinationChange={setDestination}
-        // Shared actions
-        onSwap={handleSwap}
-        onCalculateRoute={handleCalculateRoute}
-        isCalculating={isCalculating}
-        errorMessage={errorMessage}
-        onClearError={() => setErrorMessage('')}
-        activeRoute={currentActiveRoute}
-        onResetRoute={handleResetRoute}
-        recentSearches={recentSearches}
-        onSelectRecentSearch={(item) => {
-          if (appMode === 'real_world') {
-            setStartPlace({ name: item.source, lat: 26.9124, lng: 75.7873 });
-            setDestinationPlace({ name: item.destination, lat: 24.5854, lng: 73.7125 });
-          } else {
-            setSource(item.source);
-            setDestination(item.destination);
-          }
-        }}
-        // Nearby places
-        selectedCityForNearby={selectedCityForNearby}
-        onCityChangeForNearby={setSelectedCityForNearby}
-        onUseCurrentLocation={handleUseMyLocation}
-        isDetectingLocation={isLocating || isFetchingNearby}
-        currentLocationName={currentLocationName}
-        selectedCategory={selectedCategory}
-        onCategoryChange={setSelectedCategory}
-        nearbyPlaces={nearbyPlaces}
-        onNavigateToPlace={handleNavigateToNearbyPlace}
-        darkMode={darkMode}
-      />
-
-      {/* 4. FLOATING BOTTOM ROUTE RESULT CARD */}
+      {/* 3. FLOATING BOTTOM ROUTE RESULT CARD */}
       <RouteResultCard
         routeResult={currentActiveRoute}
         onOpenDetails={() => setIsRouteDetailsOpen(true)}
-        onExploreNearby={() => setActiveTab('nearby')}
+        onExploreNearby={() => {
+          setAppMode('real_world');
+          setActiveTab('nearby');
+        }}
         onResetRoute={handleResetRoute}
         darkMode={darkMode}
       />
 
-      {/* 5. RIGHT-SIDE FLOATING MAP CONTROLS */}
-      <MapControls
-        zoom={zoom}
-        onZoomIn={() => setZoom((z) => Math.min(z + 1, 18))}
-        onZoomOut={() => setZoom((z) => Math.max(z - 1, 4))}
-        onCenter={() => {
-          if (startPlace) {
-            setUserGpsCoords({ lat: startPlace.lat, lng: startPlace.lng });
-          }
-        }}
-        onResetView={() => {
-          setRouteCoordinates([]);
-          setRealRouteResult(null);
-        }}
-        darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
-        showAlgorithmPanel={showAlgorithmPanel}
-        onToggleAlgorithmPanel={() => setShowAlgorithmPanel(!showAlgorithmPanel)}
-      />
-
-      {/* 6. LIVE ALGORITHM VISUALIZATION PANEL (VIVA / CALCULATION PROGRESS) */}
-      <AlgorithmProgress
-        isCalculating={isCalculating}
-        executionLog={dijkstraRoute?.executionLog || []}
-        isOpen={showAlgorithmPanel && appMode === 'dijkstra_demo'}
-        onClose={() => setShowAlgorithmPanel(false)}
-        darkMode={darkMode}
-      />
-
-      {/* 7. TURN-BY-TURN ROUTE DETAILS DRAWER / MODAL */}
+      {/* 4. TURN-BY-TURN / SEGMENT DETAILS DRAWER */}
       <RouteDetailsDrawer
         isOpen={isRouteDetailsOpen}
         onClose={() => setIsRouteDetailsOpen(false)}
@@ -701,7 +792,7 @@ export default function App() {
         darkMode={darkMode}
       />
 
-      {/* 8. BROWSER LOCATION PERMISSION INSTRUCTIONS & HELP MODAL */}
+      {/* 5. BROWSER LOCATION PERMISSION INSTRUCTIONS & HELP MODAL */}
       <LocationPermissionModal
         isOpen={isPermissionModalOpen}
         onClose={() => setIsPermissionModalOpen(false)}
