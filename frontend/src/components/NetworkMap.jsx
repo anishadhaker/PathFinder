@@ -562,6 +562,8 @@ export default function NetworkMap({
               const isDestination = destination === cityName;
               const isOnRoute = activePathSet.has(cityName);
               const isHovered = hoveredNode === cityName;
+              const isCurrentStepNode = currentStep?.currentNode === cityName;
+              const isStepVisited = currentStep?.visited && currentStep.visited.includes(cityName);
 
               // Visual styling hierarchy
               let nodeBg = darkMode ? '#1e293b' : '#ffffff';
@@ -582,11 +584,20 @@ export default function NetworkMap({
                 badgeColor = 'bg-violet-600';
                 pulseColor = 'rgba(139, 92, 246, 0.4)';
                 radius = 26;
+              } else if (isCurrentStepNode) {
+                nodeBg = '#f59e0b'; // Amber active step node
+                strokeColor = '#fbbf24';
+                badgeColor = 'bg-amber-600';
+                pulseColor = 'rgba(245, 158, 11, 0.4)';
+                radius = 26;
               } else if (isOnRoute) {
                 nodeBg = '#0ea5e9'; // Cyan intermediate
                 strokeColor = '#38bdf8';
                 badgeColor = 'bg-sky-600';
                 pulseColor = 'rgba(14, 165, 233, 0.3)';
+                radius = 23;
+              } else if (isStepVisited) {
+                strokeColor = '#10b981';
                 radius = 23;
               } else if (isHovered) {
                 strokeColor = '#38bdf8';
@@ -605,8 +616,8 @@ export default function NetworkMap({
                   onMouseEnter={() => setHoveredNode(cityName)}
                   onMouseLeave={() => setHoveredNode(null)}
                 >
-                  {/* Outer Radar Pulse Ring for Start & Destination */}
-                  {(isSource || isDestination) && (
+                  {/* Outer Radar Pulse Ring for Start, Destination & Active Step Node */}
+                  {(isSource || isDestination || isCurrentStepNode) && (
                     <circle
                       r={radius + 14}
                       fill="none"
