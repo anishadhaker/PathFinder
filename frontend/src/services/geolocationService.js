@@ -27,19 +27,111 @@ export const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
 };
 
 /**
- * Format GeolocationPositionError to user-friendly error message
+ * Query current permission status via navigator.permissions API
+ * @returns {Promise<'granted' | 'prompt' | 'denied' | 'unsupported'>}
  */
-const formatGeolocationError = (error, context = 'location') => {
-  switch (error?.code) {
-    case 1: // PERMISSION_DENIED
-      return 'Location access was denied. Please enable location permissions in your browser.';
-    case 2: // POSITION_UNAVAILABLE
-      return 'Location information is currently unavailable. Please verify your device GPS/network.';
-    case 3: // TIMEOUT
-      return 'The request to obtain your GPS location timed out. Please try again.';
-    default:
-      return error?.message || `An error occurred while tracking device ${context}.`;
+export const checkLocationPermissionStatus = async () => {
+  if (typeof window === 'undefined' || !navigator.permissions || !navigator.permissions.query) {
+    return 'unsupported';
   }
+  try {
+    const status = await navigator.permissions.query({ name: 'geolocation' });
+    return status.state; // 'granted' | 'prompt' | 'denied'
+  } catch (err) {
+    return 'unsupported';
+  }
+};
+
+/**
+ * Listen for browser permission state changes
+ * @param {Function} callback - Invoked with new state ('granted' | 'prompt' | 'denied')
+ * @returns {Function} Unsubscribe function
+ */
+export const subscribeToPermissionChanges = (callback) => {
+  if (typeof window === 'undefined' || !navigator.permissions || !navigator.permissions.query) {
+    return () => {};
+  }
+  let activeStatus = null;
+  const handler = () => {
+    if (activeStatus && callback) callback(activeStatus.state);
+  };
+
+  navigator.permissions
+    .query({ name: 'geolocation' })
+    .then((status) => {
+      activeStatus = status;
+      status.addEventListener('change', handler);
+    })
+    .catch(() => {});
+
+  return () => {
+    if (activeStatus) {
+      activeStatus.removeEventListener('change', handler);
+    }
+  };
+};
+
+/**
+ * Format GeolocationPositionError to a structured error object
+ */
+export const createGeolocationError = async (rawError, context = 'location') => {
+  const code = rawError?.code || 0;
+  let type = 'UNKNOWN';
+  let isPermissionDenied = false;
+  let isBlocked = false;
+  let headline = 'Location Error';
+  let message = 'An unexpected error occurred while accessing location.';
+  let actionText = 'Try Again';
+
+  if (code === 1) {
+    // PERMISSION_DENIED (User rejected or browser blocked)
+    isPermissionDenied = true;
+    type = 'PERMISSION_DENIED';
+
+    const permState = await checkLocationPermissionStatus();
+    if (permState === 'denied') {
+      isBlocked = true;
+      headline = 'Location access is blocked.';
+      message = 'Please allow Location permission for this site in your browser settings, then refresh the page.';
+      actionText = 'Click here to allow location access in your browser settings, then refresh the page.';
+    } else {
+      headline = 'Location permission denied.';
+      message = 'Please allow Location permission for this site in your browser settings, then try again.';
+      actionText = 'Click here to allow location access';
+    }
+  } else if (code === 2) {
+    // POSITION_UNAVAILABLE
+    type = 'POSITION_UNAVAILABLE';
+    headline = 'Location Unavailable';
+    message = 'Unable to determine your location. Please check your device location/GPS.';
+    actionText = 'Retry Location';
+  } else if (code === 3) {
+    // TIMEOUT
+    type = 'TIMEOUT';
+    headline = 'Request Timed Out';
+    message = 'Location request timed out. Please try again.';
+    actionText = 'Try Again';
+  } else if (rawError?.message && rawError.message.includes('not supported')) {
+    type = 'UNSUPPORTED';
+    headline = 'Not Supported';
+    message = 'Geolocation is not supported by your web browser.';
+    actionText = 'Dismiss';
+  } else {
+    headline = 'Unable to Retrieve Location';
+    message = rawError?.message || `Unable to retrieve device ${context}.`;
+    actionText = 'Try Again';
+  }
+
+  const err = new Error(message);
+  err.code = code;
+  err.type = type;
+  err.isPermissionDenied = isPermissionDenied;
+  err.isBlocked = isBlocked;
+  err.headline = headline;
+  err.friendlyMessage = message;
+  err.actionText = actionText;
+  err.rawError = rawError;
+  return err;
 };
 
 /**
@@ -48,7 +140,9 @@ const formatGeolocationError = (error, context = 'location') => {
 export const getCurrentPosition = () => {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by your web browser.'));
+      createGeolocationError(new Error('Geolocation is not supported by your web browser.')).then(
+        reject
+      );
       return;
     }
 
@@ -63,8 +157,9 @@ export const getCurrentPosition = () => {
           timestamp: position.timestamp,
         });
       },
-      (error) => {
-        reject(new Error(formatGeolocationError(error, 'current position')));
+      async (error) => {
+        const enhancedError = await createGeolocationError(error, 'current position');
+        reject(enhancedError);
       },
       {
         enableHighAccuracy: true,
@@ -78,13 +173,17 @@ export const getCurrentPosition = () => {
 /**
  * Start continuous live GPS tracking using navigator.geolocation.watchPosition()
  * @param {Function} onPositionUpdate - Callback invoked with new position {lat, lng, accuracy, heading, speed}
- * @param {Function} onError - Callback invoked with Error object on GPS error
+ * @param {Function} onError - Callback invoked with structured Error object on GPS error
  * @param {object} [options] - Custom Geolocation options
  * @returns {number|null} The watch identifier or null if unsupported
  */
 export const startLiveLocationWatch = (onPositionUpdate, onError, options = {}) => {
   if (typeof window === 'undefined' || !navigator.geolocation) {
-    if (onError) onError(new Error('Geolocation is not supported by your web browser.'));
+    if (onError) {
+      createGeolocationError(new Error('Geolocation is not supported by your web browser.')).then(
+        onError
+      );
+    }
     return null;
   }
 
@@ -115,9 +214,10 @@ export const startLiveLocationWatch = (onPositionUpdate, onError, options = {}) 
           });
         }
       },
-      (error) => {
+      async (error) => {
         if (typeof onError === 'function') {
-          onError(new Error(formatGeolocationError(error, 'live tracking')));
+          const enhancedError = await createGeolocationError(error, 'live tracking');
+          onError(enhancedError);
         }
       },
       watchOptions
@@ -125,7 +225,7 @@ export const startLiveLocationWatch = (onPositionUpdate, onError, options = {}) 
     return activeWatchId;
   } catch (err) {
     if (typeof onError === 'function') {
-      onError(err);
+      createGeolocationError(err, 'live tracking').then(onError);
     }
     return null;
   }

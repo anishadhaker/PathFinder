@@ -18,6 +18,7 @@ import {
 import { CITIES } from '../data/graphData';
 import PlaceSearchInput from './PlaceSearchInput';
 import NearbyPlacesPanel from './NearbyPlacesPanel';
+import LocationPermissionAlert from './LocationPermissionAlert';
 
 export default function NavigationPanel({
   appMode = 'real_world', // 'real_world' | 'dijkstra_demo'
@@ -35,6 +36,9 @@ export default function NavigationPanel({
   onUseMyLocation,
   isLocating = false,
   isLiveTracking = false,
+  locationError = null,
+  onOpenPermissionHelp,
+  onDismissLocationError,
   // Dijkstra demo props
   source,
   destination,
@@ -181,7 +185,8 @@ export default function NavigationPanel({
 
                 {/* Starting Location */}
                 {appMode === 'real_world' ? (
-                  <PlaceSearchInput
+                  <>
+                    <PlaceSearchInput
                     label="Starting Point"
                     placeholder="Search address, landmark, college..."
                     selectedPlace={startPlace}
@@ -194,7 +199,19 @@ export default function NavigationPanel({
                     isLocating={isLocating}
                     isLiveTracking={isLiveTracking}
                   />
-                ) : (
+
+                  {/* Location Permission & GPS Error Alert */}
+                  {locationError && (
+                    <LocationPermissionAlert
+                      error={locationError}
+                      onOpenHelp={onOpenPermissionHelp}
+                      onRetry={onUseMyLocation}
+                      onDismiss={onDismissLocationError}
+                      darkMode={darkMode}
+                    />
+                  )}
+                </>
+              ) : (
                   <div className="space-y-1">
                     <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-bold text-white">
@@ -311,8 +328,8 @@ export default function NavigationPanel({
                 </div>
               )}
 
-              {/* Error Alert Message */}
-              {errorMessage && (
+              {/* Error Alert Message (Non-location routing errors) */}
+              {errorMessage && !locationError && (
                 <div className="flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50/90 p-3 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
                   <div className="flex-1 font-medium">{errorMessage}</div>

@@ -100,23 +100,37 @@ export default function PlaceSearchInput({
             type="button"
             onClick={onUseGps}
             disabled={isLocating}
-            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition ${
+            aria-busy={isLocating}
+            aria-label={
+              isLocating
+                ? 'Requesting your location from browser'
+                : isLiveTracking
+                ? 'Live location active. Click to stop tracking.'
+                : 'Use My Location to set starting point'
+            }
+            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg px-1.5 py-0.5 ${
               isLiveTracking
                 ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
                 : 'text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300'
             }`}
-            title={isLiveTracking ? 'Live GPS is actively updating your position. Click to toggle.' : 'Track live location with GPS'}
+            title={
+              isLiveTracking
+                ? 'Live GPS is actively updating your position. Click to toggle.'
+                : 'Use current browser GPS location'
+            }
           >
             <Crosshair
               className={`h-3 w-3 ${
-                isLocating ? 'animate-spin' : isLiveTracking ? 'animate-pulse text-emerald-500' : ''
+                isLocating ? 'animate-spin text-sky-500' : isLiveTracking ? 'animate-pulse text-emerald-500' : ''
               }`}
             />
-            {isLocating
-              ? 'Locating...'
-              : isLiveTracking
-              ? 'Live GPS (Active)'
-              : 'Use My GPS'}
+            <span>
+              {isLocating
+                ? 'Requesting your location...'
+                : isLiveTracking
+                ? 'Live Location (Active)'
+                : 'Use My Location'}
+            </span>
           </button>
         )}
       </div>
