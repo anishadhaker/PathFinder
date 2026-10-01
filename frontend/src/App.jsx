@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import LeafletMapView from './components/LeafletMapView';
-import DijkstraGraphView from './components/DijkstraGraphView';
-import DijkstraProgressPanel from './components/DijkstraProgressPanel';
+import NetworkMap from './components/NetworkMap';
 import NavigationPanel from './components/NavigationPanel';
 import RouteResultCard from './components/RouteResultCard';
 import RouteDetailsDrawer from './components/RouteDetailsDrawer';
+import MapControls from './components/MapControls';
+import NetworkStatus from './components/NetworkStatus';
 import LocationPermissionModal from './components/LocationPermissionModal';
 import { Route as RouteIcon, Globe2, Compass } from 'lucide-react';
 
@@ -16,9 +17,11 @@ import {
 import { calculateOsrmRoute } from './services/osrmRoutingService';
 import { fetchNearbyPlacesOsm } from './services/overpassPlacesService';
 import {
+  getCurrentPosition,
   startLiveLocationWatch,
   stopLiveLocationWatch,
   calculateDistanceMeters,
+  checkLocationPermissionStatus,
   subscribeToPermissionChanges,
 } from './services/geolocationService';
 import { reverseGeocode } from './services/nominatimService';
@@ -106,16 +109,9 @@ export default function App() {
     if (playbackTimerRef.current) clearTimeout(playbackTimerRef.current);
     setIsDijkstraPlaying(false);
     setIsDijkstraPaused(false);
-    try {
-      const { steps, finalResult } = generateDijkstraSteps(source, destination);
-      setDijkstraSteps(steps);
-      setDijkstraRoute(finalResult);
-      setCurrentStepIndex(0);
-    } catch (e) {
-      setDijkstraSteps([]);
-      setCurrentStepIndex(-1);
-      setDijkstraRoute(null);
-    }
+    setDijkstraSteps([]);
+    setCurrentStepIndex(-1);
+    setDijkstraRoute(null);
     setErrorMessage('');
   };
 
@@ -138,42 +134,78 @@ export default function App() {
     }
   };
 
-  const handleSwapDijkstra = () => {
-    const temp = source;
-    setSource(destination);
-    setDestination(temp);
-    if (playbackTimerRef.current) clearTimeout(playbackTimerRef.current);
-    setIsDijkstraPlaying(false);
-    setIsDijkstraPaused(false);
-    try {
-      const { steps, finalResult } = generateDijkstraSteps(destination, temp);
-      setDijkstraSteps(steps);
-      setDijkstraRoute(finalResult);
-      setCurrentStepIndex(0);
-    } catch (e) {}
+  const handleSourceChange = (city) => {
+    setSource(city);
+    if (city && destination) {
+      try {
+        const { steps, finalResult } = generateDijkstraSteps(city, destination);
+        setDijkstraSteps(steps);
+        setDijkstraRoute(finalResult);
+        setCurrentStepIndex(steps.length - 1);
+      } catch (e) {
+        setDijkstraRoute(null);
+      }
+    } else {
+      setDijkstraRoute(null);
+    }
+  };
+
+  const handleDestinationChange = (city) => {
+    setDestination(city);
+    if (source && city) {
+      try {
+        const { steps, finalResult } = generateDijkstraSteps(source, city);
+        setDijkstraSteps(steps);
+        setDijkstraRoute(finalResult);
+        setCurrentStepIndex(steps.length - 1);
+      } catch (e) {
+        setDijkstraRoute(null);
+      }
+    } else {
+      setDijkstraRoute(null);
+    }
+  };
+
+  const handleSwap = () => {
+    if (appMode === 'real_world') {
+      const temp = startPlace;
+      setStartPlace(destinationPlace);
+      setDestinationPlace(temp);
+    } else {
+      const tempSource = source;
+      const tempDest = destination;
+      setSource(tempDest);
+      setDestination(tempSource);
+      if (tempDest && tempSource) {
+        try {
+          const { steps, finalResult } = generateDijkstraSteps(tempDest, tempSource);
+          setDijkstraSteps(steps);
+          setDijkstraRoute(finalResult);
+          setCurrentStepIndex(steps.length - 1);
+        } catch (e) {
+          setDijkstraRoute(null);
+        }
+      }
+    }
   };
 
   const handleSelectGraphNode = (cityName) => {
-    if (!source || (source && destination && currentStepIndex === dijkstraSteps.length - 1)) {
+    if (!source || (source && destination)) {
       setSource(cityName);
       setDestination('');
-      handleResetDijkstra();
-    } else if (source && !destination) {
-      setDestination(cityName);
-      try {
-        const { steps, finalResult } = generateDijkstraSteps(source, cityName);
-        setDijkstraSteps(steps);
-        setDijkstraRoute(finalResult);
-        setCurrentStepIndex(0);
-      } catch (e) {}
+      setDijkstraRoute(null);
+      setDijkstraSteps([]);
+      setCurrentStepIndex(-1);
     } else {
       setDestination(cityName);
       try {
         const { steps, finalResult } = generateDijkstraSteps(source, cityName);
         setDijkstraSteps(steps);
         setDijkstraRoute(finalResult);
-        setCurrentStepIndex(0);
-      } catch (e) {}
+        setCurrentStepIndex(steps.length - 1);
+      } catch (e) {
+        console.warn('Failed to calculate path:', e);
+      }
     }
   };
 
@@ -199,6 +231,7 @@ export default function App() {
   const [locationError, setLocationError] = useState(null);
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
 
+  // References to preserve latest values in continuous watch callbacks without stale closures
   const lastRoutedGpsRef = useRef(null);
   const isReroutingRef = useRef(false);
   const destinationPlaceRef = useRef(destinationPlace);
@@ -249,7 +282,9 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Shared Calculation & Error State
+  // ==========================================
+  // 3. SHARED CALCULATION & NEARBY PLACES STATE
+  // ==========================================
   const [isCalculating, setIsCalculating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [recentSearches, setRecentSearches] = useState([
@@ -264,12 +299,15 @@ export default function App() {
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
   const [isFetchingNearby, setIsFetchingNearby] = useState(false);
 
-  // Modals & Panels
+  // Modals
   const [isRouteDetailsOpen, setIsRouteDetailsOpen] = useState(false);
 
-  // Theme & View State
+  // Theme & Map View State
   const [darkMode, setDarkMode] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
 
+  // Sync dark class on document element
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -289,26 +327,25 @@ export default function App() {
       lat: centerLat,
       lng: centerLng,
       category: selectedCategory,
-      radiusMeters: 5000,
     })
       .then((places) => {
         if (!isCancelled) {
           setNearbyPlaces(places);
-          setIsFetchingNearby(false);
         }
       })
-      .catch((err) => {
-        if (!isCancelled) {
-          setIsFetchingNearby(false);
-        }
+      .catch(() => {
+        if (!isCancelled) setNearbyPlaces([]);
+      })
+      .finally(() => {
+        if (!isCancelled) setIsFetchingNearby(false);
       });
 
     return () => {
       isCancelled = true;
     };
-  }, [selectedCategory, userGpsCoords, startPlace]);
+  }, [selectedCategory, startPlace, userGpsCoords]);
 
-  // Real-world OSRM routing
+  // Handle Route Calculation
   const handleCalculateRoute = async () => {
     setErrorMessage('');
     setIsCalculating(true);
@@ -362,135 +399,77 @@ export default function App() {
       } finally {
         setIsCalculating(false);
       }
-    }
-  };
-
-  // Swap locations for real-world mode
-  const handleSwap = () => {
-    if (appMode === 'real_world') {
-      const temp = startPlace;
-      setStartPlace(destinationPlace);
-      setDestinationPlace(temp);
-      setRouteCoordinates([]);
-      setRealRouteResult(null);
     } else {
-      handleSwapDijkstra();
+      // Dijkstra Demo Mode
+      handleRunInstantly();
+      setIsCalculating(false);
     }
-    setErrorMessage('');
   };
 
-  // Stop continuous live GPS tracking
+  // Stop Live GPS Location Tracking
   const handleStopLiveLocation = () => {
     stopLiveLocationWatch();
     setIsLiveTracking(false);
     setIsLocating(false);
+    lastRoutedGpsRef.current = null;
   };
 
-  // Continuous Live GPS Location Tracking using watchPosition()
+  // Continuous Live GPS Location Tracking
   const handleUseMyLocation = () => {
-    if (isLiveTracking) {
-      handleStopLiveLocation();
-      return;
-    }
-
-    setIsLocating(true);
     setLocationError(null);
     setErrorMessage('');
-
-    let isInitialFix = true;
+    setIsLocating(true);
 
     startLiveLocationWatch(
       async (pos) => {
-        setUserGpsCoords(pos);
         setIsLocating(false);
         setIsLiveTracking(true);
-        setLocationError(null);
+        setUserGpsCoords({
+          lat: pos.lat,
+          lng: pos.lng,
+          accuracy: pos.accuracy,
+          timestamp: pos.timestamp,
+        });
 
-        if (isInitialFix) {
-          isInitialFix = false;
-          lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
-
-          try {
-            const geo = await reverseGeocode(pos.lat, pos.lng);
-            setStartPlace({
-              name: geo.name || 'My Current GPS Location',
-              displayName: geo.displayName,
-              lat: pos.lat,
-              lng: pos.lng,
-              isGps: true,
-            });
-            setCurrentLocationName(geo.name || 'Live GPS Location');
-          } catch (e) {
-            setStartPlace({
-              name: 'My Current GPS Location',
-              lat: pos.lat,
-              lng: pos.lng,
-              isGps: true,
-            });
-          }
-
-          const dest = destinationPlaceRef.current;
-          if (dest && dest.lat && dest.lng) {
-            try {
-              isReroutingRef.current = true;
-              const result = await calculateOsrmRoute({
-                startLat: pos.lat,
-                startLng: pos.lng,
-                endLat: dest.lat,
-                endLng: dest.lng,
-                mode: travelModeRef.current,
-              });
-
-              setRouteCoordinates(result.coordinates);
-              setRealRouteResult({
-                source: 'My Current Location',
-                destination: dest.name,
-                path: ['My Current Location', dest.name],
-                distance: result.distanceKm,
-                stopsCount: 2,
-                travelTime: result.formattedDuration,
-                segments: result.steps.map((st) => ({
-                  from: st.instruction,
-                  to: '',
-                  distance: st.distance,
-                  routeName: st.instruction,
-                })),
-                algorithm: 'Open Source Routing Machine (OSRM)',
-                steps: result.steps,
-              });
-            } catch (initErr) {
-              console.warn('Initial live route calculation skipped:', initErr);
-            } finally {
-              isReroutingRef.current = false;
-            }
-          }
-          return;
+        let placeName = 'My Current Location';
+        try {
+          placeName = await reverseGeocode(pos.lat, pos.lng);
+        } catch (e) {
+          console.warn('Reverse geocoding failed:', e);
         }
 
-        setStartPlace((prev) =>
-          prev?.isGps ? { ...prev, lat: pos.lat, lng: pos.lng } : prev
-        );
+        const newStartPlace = {
+          name: placeName,
+          lat: pos.lat,
+          lng: pos.lng,
+          accuracy: pos.accuracy,
+          isCurrentLocation: true,
+        };
+        setStartPlace(newStartPlace);
+        setCurrentLocationName(placeName);
 
         const dest = destinationPlaceRef.current;
-        if (!dest || !dest.lat || !dest.lng) {
-          return;
+        if (!dest) return;
+
+        let shouldReroute = false;
+        if (!lastRoutedGpsRef.current) {
+          shouldReroute = true;
+        } else {
+          const movedMeters = calculateDistanceMeters(
+            lastRoutedGpsRef.current.lat,
+            lastRoutedGpsRef.current.lng,
+            pos.lat,
+            pos.lng
+          );
+          if (movedMeters > 40) {
+            shouldReroute = true;
+          }
         }
 
-        const lastRouted = lastRoutedGpsRef.current;
-        const movementMeters = lastRouted
-          ? calculateDistanceMeters(lastRouted.lat, lastRouted.lng, pos.lat, pos.lng)
-          : 999;
+        if (!shouldReroute || isReroutingRef.current) return;
 
-        if (movementMeters < 40) {
-          return;
-        }
-
-        if (isReroutingRef.current) {
-          return;
-        }
-
-        lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
         isReroutingRef.current = true;
+        lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
 
         try {
           const result = await calculateOsrmRoute({
@@ -613,139 +592,59 @@ export default function App() {
 
   return (
     <div className={`relative h-screen w-screen overflow-hidden ${darkMode ? 'dark bg-[#0b1120]' : 'bg-[#f4f7fb]'}`}>
-      {/* 1. MAIN WORKSPACE BASED ON APP MODE */}
-      {appMode === 'dijkstra_demo' ? (
-        <div className="relative h-full w-full flex overflow-hidden">
-          {/* Left Dijkstra Progress & Control Panel */}
-          <div className="w-full sm:w-[420px] lg:w-[460px] h-full z-20 shrink-0 shadow-2xl">
-            <DijkstraProgressPanel
-              source={source}
-              destination={destination}
-              onSourceChange={(city) => {
-                setSource(city);
-                handleResetDijkstra();
-              }}
-              onDestinationChange={(city) => {
-                setDestination(city);
-                handleResetDijkstra();
-              }}
-              onSwap={handleSwapDijkstra}
-              currentStep={dijkstraSteps[currentStepIndex] || null}
-              currentStepIndex={currentStepIndex}
-              totalSteps={dijkstraSteps.length}
-              isPlaying={isDijkstraPlaying}
-              isPaused={isDijkstraPaused}
-              isComplete={currentStepIndex === dijkstraSteps.length - 1 && dijkstraSteps.length > 0}
-              speed={animationSpeed}
-              onSpeedChange={setAnimationSpeed}
-              onRun={handleRunDijkstra}
-              onPause={handlePauseDijkstra}
-              onResume={handleResumeDijkstra}
-              onReset={handleResetDijkstra}
-              onRunInstantly={handleRunInstantly}
-              finalResult={dijkstraRoute}
-              errorMessage={errorMessage}
-              darkMode={darkMode}
-            />
-          </div>
-
-          {/* Center / Right Dijkstra Graph Canvas */}
-          <div className="hidden sm:block flex-1 h-full relative">
-            <DijkstraGraphView
-              source={source}
-              destination={destination}
-              currentStep={dijkstraSteps[currentStepIndex] || null}
-              finalPath={
-                currentStepIndex === dijkstraSteps.length - 1 && dijkstraRoute
-                  ? dijkstraRoute.path
-                  : []
-              }
-              onSelectNode={handleSelectGraphNode}
-              darkMode={darkMode}
-            />
-          </div>
-        </div>
+      {/* 1. FULL-SCREEN MAP CANVAS: Leaflet (Real-World) or NetworkMap (Dijkstra) */}
+      {appMode === 'real_world' ? (
+        <LeafletMapView
+          startCoords={startPlace}
+          destinationCoords={destinationPlace}
+          routeCoordinates={routeCoordinates}
+          userGpsCoords={userGpsCoords}
+          isLiveTracking={isLiveTracking}
+          nearbyPlaces={nearbyPlaces}
+          onNavigateToNearbyPlace={handleNavigateToNearbyPlace}
+          darkMode={darkMode}
+          mapCenter={
+            startPlace ? [startPlace.lat, startPlace.lng] : [26.9124, 75.7873]
+          }
+          zoom={12}
+        />
       ) : (
-        /* Real-World Navigation Mode */
-        <div className="relative h-full w-full">
-          <LeafletMapView
-            startCoords={startPlace}
-            destinationCoords={destinationPlace}
-            routeCoordinates={routeCoordinates}
-            userGpsCoords={userGpsCoords}
-            isLiveTracking={isLiveTracking}
-            nearbyPlaces={nearbyPlaces}
-            onNavigateToNearbyPlace={handleNavigateToNearbyPlace}
-            darkMode={darkMode}
-            mapCenter={
-              startPlace ? [startPlace.lat, startPlace.lng] : [26.9124, 75.7873]
-            }
-            zoom={12}
-          />
-
-          <NavigationPanel
-            appMode={appMode}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            startPlace={startPlace}
-            destinationPlace={destinationPlace}
-            onSelectStartPlace={setStartPlace}
-            onSelectDestinationPlace={setDestinationPlace}
-            onClearStartPlace={() => setStartPlace(null)}
-            onClearDestinationPlace={() => setDestinationPlace(null)}
-            travelMode={travelMode}
-            onTravelModeChange={setTravelMode}
-            onUseMyLocation={handleUseMyLocation}
-            onStopLiveLocation={handleStopLiveLocation}
-            isLocating={isLocating}
-            isLiveTracking={isLiveTracking}
-            locationError={locationError}
-            onOpenPermissionHelp={() => setIsPermissionModalOpen(true)}
-            onDismissLocationError={() => setLocationError(null)}
-            source={source}
-            destination={destination}
-            onSourceChange={setSource}
-            onDestinationChange={setDestination}
-            onSwap={handleSwap}
-            onCalculateRoute={handleCalculateRoute}
-            isCalculating={isCalculating}
-            errorMessage={errorMessage}
-            onClearError={() => setErrorMessage('')}
-            activeRoute={currentActiveRoute}
-            onResetRoute={handleResetRoute}
-            recentSearches={recentSearches}
-            onSelectRecentSearch={(item) => {
-              setStartPlace({ name: item.source, lat: 26.9124, lng: 75.7873 });
-              setDestinationPlace({ name: item.destination, lat: 24.5854, lng: 73.7125 });
-            }}
-            selectedCityForNearby={selectedCityForNearby}
-            onCityChangeForNearby={setSelectedCityForNearby}
-            onUseCurrentLocation={handleUseMyLocation}
-            isDetectingLocation={isLocating || isFetchingNearby}
-            currentLocationName={currentLocationName}
-            selectedCategory={selectedCategory}
-            onCategoryChange={setSelectedCategory}
-            nearbyPlaces={nearbyPlaces}
-            onNavigateToPlace={handleNavigateToNearbyPlace}
-            darkMode={darkMode}
-          />
-        </div>
+        <NetworkMap
+          source={source}
+          destination={destination}
+          activeRoute={dijkstraRoute}
+          currentStep={dijkstraSteps[currentStepIndex] || null}
+          activeTab={activeTab}
+          selectedCityForNearby={selectedCityForNearby}
+          nearbyPlaces={nearbyPlaces}
+          selectedCategory={selectedCategory}
+          onSelectCity={handleSelectGraphNode}
+          onNavigateToPlace={handleNavigateToNearbyPlace}
+          darkMode={darkMode}
+          zoom={zoom}
+          pan={pan}
+          onPanChange={setPan}
+          onResetView={() => {
+            setZoom(1);
+            setPan({ x: 0, y: 0 });
+          }}
+        />
       )}
 
       {/* 2. TOP PRIMARY / DUAL-MODE SWITCHER */}
-      <div className="fixed top-4 left-4 sm:left-[475px] z-30 flex items-center gap-3">
-        <div className="flex items-center rounded-2xl border border-slate-200/90 bg-white/95 p-1 shadow-xl backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
+      <div className="fixed top-4 left-4 sm:left-[435px] z-20 hidden md:flex items-center gap-3">
+        <div className="flex items-center rounded-2xl border border-slate-200/90 bg-white/95 p-1 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
           <button
             type="button"
             onClick={() => setAppMode('dijkstra_demo')}
-            className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-black transition-all ${
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
               appMode === 'dijkstra_demo'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
           >
             <RouteIcon className="h-3.5 w-3.5" />
-            <span>Dijkstra Shortest Path (Academic Core)</span>
+            <span>Dijkstra Shortest Path</span>
           </button>
           <button
             type="button"
@@ -757,22 +656,90 @@ export default function App() {
             }`}
           >
             <Globe2 className="h-3.5 w-3.5" />
-            <span>Real-World Navigation (OSM/OSRM)</span>
+            <span>Real-World Navigation (OSM & OSRM)</span>
           </button>
         </div>
 
-        {/* Dark Mode Toggle */}
-        <button
-          type="button"
-          onClick={() => setDarkMode(!darkMode)}
-          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200/90 bg-white/95 text-slate-700 shadow-lg backdrop-blur-md hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-200"
-          title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-        >
-          {darkMode ? '☀️' : '🌙'}
-        </button>
+        {appMode === 'dijkstra_demo' && <NetworkStatus darkMode={darkMode} />}
       </div>
 
-      {/* 3. FLOATING BOTTOM ROUTE RESULT CARD */}
+      {/* 3. LEFT FLOATING NAVIGATION & NEARBY PANEL */}
+      <NavigationPanel
+        appMode={appMode}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        // Real-world props
+        startPlace={startPlace}
+        destinationPlace={destinationPlace}
+        onSelectStartPlace={setStartPlace}
+        onSelectDestinationPlace={setDestinationPlace}
+        onClearStartPlace={() => setStartPlace(null)}
+        onClearDestinationPlace={() => setDestinationPlace(null)}
+        travelMode={travelMode}
+        onTravelModeChange={setTravelMode}
+        onUseMyLocation={handleUseMyLocation}
+        onStopLiveLocation={handleStopLiveLocation}
+        isLocating={isLocating}
+        isLiveTracking={isLiveTracking}
+        locationError={locationError}
+        onOpenPermissionHelp={() => setIsPermissionModalOpen(true)}
+        onDismissLocationError={() => setLocationError(null)}
+        // Dijkstra demo props
+        source={source}
+        destination={destination}
+        onSourceChange={handleSourceChange}
+        onDestinationChange={handleDestinationChange}
+        // Dijkstra playback controls
+        onRun={handleRunDijkstra}
+        onPause={handlePauseDijkstra}
+        onResume={handleResumeDijkstra}
+        onReset={handleResetDijkstra}
+        onRunInstantly={handleRunInstantly}
+        isPlaying={isDijkstraPlaying}
+        isPaused={isDijkstraPaused}
+        speed={animationSpeed}
+        onSpeedChange={setAnimationSpeed}
+        currentStep={dijkstraSteps[currentStepIndex] || null}
+        currentStepIndex={currentStepIndex}
+        totalSteps={dijkstraSteps.length}
+        // Shared actions
+        onSwap={handleSwap}
+        onCalculateRoute={handleCalculateRoute}
+        isCalculating={isCalculating}
+        errorMessage={errorMessage}
+        onClearError={() => setErrorMessage('')}
+        activeRoute={currentActiveRoute}
+        onResetRoute={handleResetRoute}
+        recentSearches={recentSearches}
+        onSelectRecentSearch={(item) => {
+          if (appMode === 'real_world') {
+            setStartPlace({ name: item.source, lat: 26.9124, lng: 75.7873 });
+            setDestinationPlace({ name: item.destination, lat: 24.5854, lng: 73.7125 });
+          } else {
+            setSource(item.source);
+            setDestination(item.destination);
+            try {
+              const { steps, finalResult } = generateDijkstraSteps(item.source, item.destination);
+              setDijkstraSteps(steps);
+              setDijkstraRoute(finalResult);
+              setCurrentStepIndex(steps.length - 1);
+            } catch (e) {}
+          }
+        }}
+        // Nearby places
+        selectedCityForNearby={selectedCityForNearby}
+        onCityChangeForNearby={setSelectedCityForNearby}
+        onUseCurrentLocation={handleUseMyLocation}
+        isDetectingLocation={isLocating || isFetchingNearby}
+        currentLocationName={currentLocationName}
+        selectedCategory={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+        nearbyPlaces={nearbyPlaces}
+        onNavigateToPlace={handleNavigateToNearbyPlace}
+        darkMode={darkMode}
+      />
+
+      {/* 4. FLOATING BOTTOM ROUTE RESULT CARD */}
       <RouteResultCard
         routeResult={currentActiveRoute}
         onOpenDetails={() => setIsRouteDetailsOpen(true)}
@@ -784,7 +751,34 @@ export default function App() {
         darkMode={darkMode}
       />
 
-      {/* 4. TURN-BY-TURN / SEGMENT DETAILS DRAWER */}
+      {/* 5. RIGHT-SIDE FLOATING MAP CONTROLS */}
+      <MapControls
+        zoom={zoom}
+        onZoomIn={() => setZoom((z) => Math.min(z + 1, 18))}
+        onZoomOut={() => setZoom((z) => Math.max(z - 1, 4))}
+        onCenter={() => {
+          if (appMode === 'real_world' && startPlace) {
+            setUserGpsCoords({ lat: startPlace.lat, lng: startPlace.lng });
+          } else {
+            setPan({ x: 0, y: 0 });
+            setZoom(1);
+          }
+        }}
+        onResetView={() => {
+          if (appMode === 'real_world') {
+            setRouteCoordinates([]);
+            setRealRouteResult(null);
+          } else {
+            handleResetDijkstra();
+            setZoom(1);
+            setPan({ x: 0, y: 0 });
+          }
+        }}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+      />
+
+      {/* 6. TURN-BY-TURN / SEGMENT DETAILS DRAWER */}
       <RouteDetailsDrawer
         isOpen={isRouteDetailsOpen}
         onClose={() => setIsRouteDetailsOpen(false)}
@@ -792,7 +786,7 @@ export default function App() {
         darkMode={darkMode}
       />
 
-      {/* 5. BROWSER LOCATION PERMISSION INSTRUCTIONS & HELP MODAL */}
+      {/* 7. BROWSER LOCATION PERMISSION INSTRUCTIONS & HELP MODAL */}
       <LocationPermissionModal
         isOpen={isPermissionModalOpen}
         onClose={() => setIsPermissionModalOpen(false)}

@@ -29,7 +29,7 @@ export const calculateTravelTime = (distanceKm) => {
   return `${hours}h ${minutes}m`;
 };
 
-// Standard Dijkstra Pseudocode with Line Numbers for Viva & UI Highlighting
+// Standard Dijkstra Pseudocode with Line Numbers for UI Highlighting
 export const DIJKSTRA_PSEUDOCODE = [
   { line: 1, text: 'dist[source] = 0; dist[all other v] = ∞' },
   { line: 2, text: 'while unvisited nodes exist in Q:' },
@@ -498,7 +498,7 @@ export const runDijkstra = (source, destination) => {
   return finalResult;
 };
 
-// Asynchronous wrapper with optional delay for viva demonstration
+// Asynchronous wrapper with optional delay for demonstration
 export const calculateShortestPath = async ({ source, destination, delayMs = 300 }) => {
   if (delayMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
