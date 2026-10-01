@@ -286,6 +286,7 @@ export default function NetworkMap({
               if (!start || !end) return null;
 
               const isHighlighted = isRoadInActivePath(road.from, road.to);
+              const isStepActive = isCurrentStepEdge(road.from, road.to);
               const midX = (start.x + end.x) / 2;
               const midY = (start.y + end.y) / 2;
 
@@ -301,12 +302,16 @@ export default function NetworkMap({
                       darkMode
                         ? isHighlighted
                           ? 'rgba(6, 182, 212, 0.3)'
+                          : isStepActive
+                          ? 'rgba(245, 158, 11, 0.3)'
                           : 'rgba(30, 41, 59, 0.8)'
                         : isHighlighted
                         ? 'rgba(14, 165, 233, 0.3)'
+                        : isStepActive
+                        ? 'rgba(245, 158, 11, 0.3)'
                         : 'rgba(226, 232, 240, 0.9)'
                     }
-                    strokeWidth={isHighlighted ? 9 : 5}
+                    strokeWidth={isHighlighted || isStepActive ? 9 : 5}
                     strokeLinecap="round"
                     className="transition-all duration-300"
                   />
@@ -321,16 +326,20 @@ export default function NetworkMap({
                       darkMode
                         ? isHighlighted
                           ? '#06b6d4'
+                          : isStepActive
+                          ? '#f59e0b'
                           : activeRoute
                           ? 'rgba(51, 65, 85, 0.4)'
                           : 'rgba(71, 85, 105, 0.65)'
                         : isHighlighted
                         ? '#0284c7'
+                        : isStepActive
+                        ? '#f59e0b'
                         : activeRoute
                         ? 'rgba(203, 213, 225, 0.6)'
                         : 'rgba(148, 163, 184, 0.75)'
                     }
-                    strokeWidth={isHighlighted ? 4 : 2}
+                    strokeWidth={isHighlighted || isStepActive ? 4 : 2}
                     strokeLinecap="round"
                     strokeDasharray={isHighlighted ? 'none' : '4 4'}
                     className="transition-all duration-300"
@@ -348,6 +357,21 @@ export default function NetworkMap({
                       strokeLinecap="round"
                       strokeDasharray="8 6"
                       filter="url(#routeGlow)"
+                      className="animate-pulse"
+                    />
+                  )}
+
+                  {/* Step Active Relaxing Edge Glowing Stroke */}
+                  {!isHighlighted && isStepActive && (
+                    <line
+                      x1={start.x}
+                      y1={start.y}
+                      x2={end.x}
+                      y2={end.y}
+                      stroke="#f59e0b"
+                      strokeWidth="4.5"
+                      strokeLinecap="round"
+                      strokeDasharray="8 6"
                       className="animate-pulse"
                     />
                   )}
