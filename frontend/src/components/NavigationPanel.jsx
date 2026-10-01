@@ -34,6 +34,7 @@ export default function NavigationPanel({
   travelMode = 'driving',
   onTravelModeChange,
   onUseMyLocation,
+  onStopLiveLocation,
   isLocating = false,
   isLiveTracking = false,
   locationError = null,
@@ -196,6 +197,7 @@ export default function NavigationPanel({
                     badgeColor="bg-emerald-500"
                     showGpsButton={true}
                     onUseGps={onUseMyLocation}
+                    onStopLiveLocation={onStopLiveLocation}
                     isLocating={isLocating}
                     isLiveTracking={isLiveTracking}
                   />
@@ -458,6 +460,7 @@ export default function NavigationPanel({
               selectedCity={selectedCityForNearby}
               onCityChange={onCityChangeForNearby}
               onUseCurrentLocation={onUseCurrentLocation}
+              onStopLiveLocation={onStopLiveLocation}
               isDetectingLocation={isDetectingLocation}
               isLiveTracking={isLiveTracking}
               locationError={locationError}

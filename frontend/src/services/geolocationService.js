@@ -127,6 +127,7 @@ export const createGeolocationError = async (rawError, context = 'location') => 
   err.type = type;
   err.isPermissionDenied = isPermissionDenied;
   err.isBlocked = isBlocked;
+  err.isTransient = code === 2 || code === 3;
   err.headline = headline;
   err.friendlyMessage = message;
   err.actionText = actionText;
@@ -163,8 +164,8 @@ export const getCurrentPosition = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 10000,
+        timeout: 15000,
+        maximumAge: 5000,
       }
     );
   });
@@ -172,7 +173,7 @@ export const getCurrentPosition = () => {
 
 /**
  * Start continuous live GPS tracking using navigator.geolocation.watchPosition()
- * @param {Function} onPositionUpdate - Callback invoked with new position {lat, lng, accuracy, heading, speed}
+ * @param {Function} onPositionUpdate - Callback invoked with new position {lat, lng, accuracy, heading, speed, timestamp}
  * @param {Function} onError - Callback invoked with structured Error object on GPS error
  * @param {object} [options] - Custom Geolocation options
  * @returns {number|null} The watch identifier or null if unsupported
@@ -195,8 +196,8 @@ export const startLiveLocationWatch = (onPositionUpdate, onError, options = {}) 
 
   const watchOptions = {
     enableHighAccuracy: true,
+    maximumAge: 5000,
     timeout: 15000,
-    maximumAge: 3000,
     ...options,
   };
 
@@ -250,5 +251,13 @@ export const stopLiveLocationWatch = () => {
  */
 export const isLiveLocationTracking = () => {
   return activeWatchId !== null;
+};
+
+/**
+ * Get active watch identifier
+ * @returns {number|null}
+ */
+export const getActiveWatchId = () => {
+  return activeWatchId;
 };
 

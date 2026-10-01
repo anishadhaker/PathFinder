@@ -12,6 +12,7 @@ export default function PlaceSearchInput({
   badgeColor = 'bg-emerald-500',
   showGpsButton = false,
   onUseGps,
+  onStopLiveLocation,
   isLocating = false,
   isLiveTracking = false,
 }) {
@@ -96,42 +97,46 @@ export default function PlaceSearchInput({
         </label>
 
         {showGpsButton && (
-          <button
-            type="button"
-            onClick={onUseGps}
-            disabled={isLocating}
-            aria-busy={isLocating}
-            aria-label={
-              isLocating
-                ? 'Requesting your location from browser'
-                : isLiveTracking
-                ? 'Live location active. Click to stop tracking.'
-                : 'Use My Location to set starting point'
-            }
-            className={`inline-flex items-center gap-1.5 text-[11px] font-bold transition focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg px-1.5 py-0.5 ${
-              isLiveTracking
-                ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
-                : 'text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300'
-            }`}
-            title={
-              isLiveTracking
-                ? 'Live GPS is actively updating your position. Click to toggle.'
-                : 'Use current browser GPS location'
-            }
-          >
-            <Crosshair
-              className={`h-3 w-3 ${
-                isLocating ? 'animate-spin text-sky-500' : isLiveTracking ? 'animate-pulse text-emerald-500' : ''
-              }`}
-            />
-            <span>
-              {isLocating
-                ? 'Requesting your location...'
-                : isLiveTracking
-                ? 'Live Location (Active)'
-                : 'Use My Location'}
-            </span>
-          </button>
+          <div>
+            {isLiveTracking ? (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 dark:text-sky-400">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+                  </span>
+                  <span>Live Location Active</span>
+                </span>
+                {onStopLiveLocation && (
+                  <button
+                    type="button"
+                    onClick={onStopLiveLocation}
+                    className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 shadow-sm transition hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/60"
+                    title="Stop continuous GPS tracking and clear watcher"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                    <span>Stop</span>
+                  </button>
+                )}
+              </div>
+            ) : isLocating ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 dark:text-sky-400">
+                <Loader2 className="h-3 w-3 animate-spin text-sky-500" />
+                <span>Requesting your location...</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onUseGps}
+                disabled={isLocating}
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 hover:text-sky-700 transition focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg px-1.5 py-0.5 dark:text-sky-400 dark:hover:text-sky-300"
+                title="Start continuous GPS live tracking"
+              >
+                <Crosshair className="h-3 w-3 text-sky-500" />
+                <span>Use My Location</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
 

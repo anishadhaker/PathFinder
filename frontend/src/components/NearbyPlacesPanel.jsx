@@ -47,6 +47,7 @@ export default function NearbyPlacesPanel({
   selectedCity,
   onCityChange,
   onUseCurrentLocation,
+  onStopLiveLocation,
   isDetectingLocation,
   isLiveTracking = false,
   locationError = null,
@@ -98,29 +99,42 @@ export default function NearbyPlacesPanel({
           <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Current / Selected Location
           </label>
-          <button
-            type="button"
-            onClick={onUseCurrentLocation}
-            disabled={isDetectingLocation}
-            className={`inline-flex items-center gap-1.5 text-xs font-semibold transition ${
-              isLiveTracking
-                ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
-                : 'text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300'
-            }`}
-          >
-            <Crosshair
-              className={`h-3 w-3 ${
-                isDetectingLocation ? 'animate-spin text-sky-500' : isLiveTracking ? 'animate-pulse text-emerald-500' : ''
-              }`}
-            />
-            <span>
-              {isDetectingLocation
-                ? 'Requesting your location...'
-                : isLiveTracking
-                ? 'Live Location (Active)'
-                : 'Use Current Location'}
+          {isLiveTracking ? (
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-sky-600 dark:text-sky-400">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+                </span>
+                <span>Live Active</span>
+              </span>
+              {onStopLiveLocation && (
+                <button
+                  type="button"
+                  onClick={onStopLiveLocation}
+                  className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/60 transition"
+                  title="Stop continuous GPS tracking"
+                >
+                  Stop
+                </button>
+              )}
+            </div>
+          ) : isDetectingLocation ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600 dark:text-sky-400">
+              <Crosshair className="h-3 w-3 animate-spin text-sky-500" />
+              <span>Requesting your location...</span>
             </span>
-          </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onUseCurrentLocation}
+              disabled={isDetectingLocation}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition"
+            >
+              <Crosshair className="h-3 w-3 text-sky-500" />
+              <span>Use Current Location</span>
+            </button>
+          )}
         </div>
 
         <div className="relative">

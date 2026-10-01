@@ -25,23 +25,62 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-// Custom Map Controller to smoothly re-center or fit route bounds
-function MapController({ center, zoom, routeBounds }) {
+// Custom Map Controller to smoothly re-center on start or fit route bounds without locking user pan
+function SmartMapController({
+  center,
+  zoom,
+  routeBounds,
+  userGpsCoords,
+  isLiveTracking,
+  reCenterTrigger,
+}) {
   const map = useMap();
+  const hasInitiallyCenteredRef = useRef(false);
+  const prevRouteKeyRef = useRef('');
 
+  // 1. Initial center on user location when live tracking starts
   useEffect(() => {
-    if (routeBounds && routeBounds.length > 1) {
-      map.fitBounds(routeBounds, { padding: [60, 60], maxZoom: 15 });
-    } else if (center) {
+    if (isLiveTracking && userGpsCoords && !hasInitiallyCenteredRef.current) {
+      hasInitiallyCenteredRef.current = true;
+      map.setView([userGpsCoords.lat, userGpsCoords.lng], 15, { animate: true });
+    } else if (!isLiveTracking) {
+      hasInitiallyCenteredRef.current = false;
+    }
+  }, [isLiveTracking, userGpsCoords, map]);
+
+  // 2. Fit bounds when a new route is calculated
+  useEffect(() => {
+    if (routeBounds && routeBounds.isValid && routeBounds.isValid()) {
+      const key = routeBounds.toBBoxString();
+      if (key !== prevRouteKeyRef.current) {
+        prevRouteKeyRef.current = key;
+        map.fitBounds(routeBounds, { padding: [60, 60], maxZoom: 15 });
+      }
+    }
+  }, [routeBounds, map]);
+
+  // 3. User explicitly clicked "Center on Live Location"
+  useEffect(() => {
+    if (reCenterTrigger > 0 && userGpsCoords) {
+      map.flyTo([userGpsCoords.lat, userGpsCoords.lng], 16, {
+        animate: true,
+        duration: 1.2,
+      });
+    }
+  }, [reCenterTrigger, userGpsCoords, map]);
+
+  // 4. Default centering when NOT live tracking and route is not active
+  useEffect(() => {
+    if (!isLiveTracking && (!routeBounds || !routeBounds.isValid()) && center) {
       map.setView(center, zoom || 13, { animate: true });
     }
-  }, [center, zoom, routeBounds, map]);
+  }, [center, zoom, isLiveTracking, routeBounds, map]);
 
   return null;
 }
 
 // Custom HTML DivIcon creator for modern map pins
-const createCustomIcon = (type, label = '') => {
+const createCustomIcon = (type, label = '', isLive = false) => {
   if (type === 'start') {
     return L.divIcon({
       className: 'custom-leaflet-marker',
@@ -76,15 +115,22 @@ const createCustomIcon = (type, label = '') => {
 
   if (type === 'gps') {
     return L.divIcon({
-      className: 'custom-leaflet-marker',
+      className: 'custom-leaflet-marker live-gps-marker',
       html: `
         <div style="position: relative; display: flex; align-items: center; justify-content: center; transform: translate(-50%, -50%);">
-          <div style="position: absolute; width: 32px; height: 32px; border-radius: 50%; background: rgba(14, 165, 233, 0.25); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-          <div style="width: 14px; height: 14px; border-radius: 50%; background: #0284c7; border: 2.5px solid white; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.5);"></div>
+          ${
+            isLive
+              ? `
+            <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(14, 165, 233, 0.22); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+            <div style="position: absolute; width: 28px; height: 28px; border-radius: 50%; background: rgba(56, 189, 248, 0.35); animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></div>
+          `
+              : ''
+          }
+          <div style="position: relative; width: 16px; height: 16px; border-radius: 50%; background: #0284c7; border: 3px solid white; box-shadow: 0 2px 10px rgba(2, 132, 199, 0.6);"></div>
         </div>
       `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
     });
   }
 
@@ -132,6 +178,8 @@ export default function LeafletMapView({
   mapCenter = [26.9124, 75.7873], // Default Jaipur
   zoom = 12,
 }) {
+  const [reCenterTrigger, setReCenterTrigger] = React.useState(0);
+
   // Tile URLs
   const dayTiles = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
   const nightTiles = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
@@ -150,10 +198,13 @@ export default function LeafletMapView({
         zoomControl={false}
         className="h-full w-full z-10"
       >
-        <MapController
+        <SmartMapController
           center={mapCenter}
           zoom={zoom}
           routeBounds={routeBounds}
+          userGpsCoords={userGpsCoords}
+          isLiveTracking={isLiveTracking}
+          reCenterTrigger={reCenterTrigger}
         />
 
         {/* Tile Layer (OSM Light or CartoDB Dark Matter) */}
@@ -164,7 +215,7 @@ export default function LeafletMapView({
           maxZoom={19}
         />
 
-        {/* User Live GPS Marker & Accuracy Circle */}
+        {/* User Live GPS Marker & Accuracy Circle - Single live-location marker */}
         {userGpsCoords && (
           <>
             {userGpsCoords.accuracy && userGpsCoords.accuracy < 2500 && (
@@ -172,32 +223,67 @@ export default function LeafletMapView({
                 center={[userGpsCoords.lat, userGpsCoords.lng]}
                 radius={userGpsCoords.accuracy}
                 pathOptions={{
-                  color: '#0284c7',
-                  fillColor: '#38bdf8',
-                  fillOpacity: 0.12,
+                  color: isLiveTracking ? '#0284c7' : '#94a3b8',
+                  fillColor: isLiveTracking ? '#38bdf8' : '#cbd5e1',
+                  fillOpacity: isLiveTracking ? 0.15 : 0.08,
                   weight: 1.5,
                 }}
               />
             )}
             <Marker
               position={[userGpsCoords.lat, userGpsCoords.lng]}
-              icon={createCustomIcon('gps')}
+              icon={createCustomIcon('gps', '', isLiveTracking)}
             >
               <Popup>
-                <div className="text-xs">
-                  <span className="font-bold text-sky-600">Your Current Position</span>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {isLiveTracking ? 'Live location active' : 'Live location stopped'}
-                    {userGpsCoords.accuracy ? ` (±${Math.round(userGpsCoords.accuracy)}m)` : ''}
-                  </p>
+                <div className="p-1 min-w-[200px] text-xs">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        isLiveTracking ? 'bg-sky-500 animate-ping' : 'bg-slate-400'
+                      }`}
+                    />
+                    <span className={isLiveTracking ? 'text-sky-600 dark:text-sky-400' : 'text-slate-600'}>
+                      {isLiveTracking ? '🔵 Live Location Active' : 'Location Tracking Off'}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Coordinates:</span>
+                      <span className="font-mono font-medium">
+                        {userGpsCoords.lat.toFixed(5)}°, {userGpsCoords.lng.toFixed(5)}°
+                      </span>
+                    </div>
+                    {userGpsCoords.accuracy && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Accuracy:</span>
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                          ±{Math.round(userGpsCoords.accuracy)} meters
+                        </span>
+                      </div>
+                    )}
+                    {userGpsCoords.speed != null && userGpsCoords.speed > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Speed:</span>
+                        <span className="font-medium">
+                          {Math.round(userGpsCoords.speed * 3.6)} km/h
+                        </span>
+                      </div>
+                    )}
+                    {userGpsCoords.timestamp && (
+                      <div className="flex justify-between border-t border-slate-100 pt-1 text-[10px] text-slate-400 dark:border-slate-800">
+                        <span>Updated:</span>
+                        <span>{new Date(userGpsCoords.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </Popup>
             </Marker>
           </>
         )}
 
-        {/* Start Point Marker */}
-        {startCoords && (
+        {/* Start Point Marker: Rendered only when NOT driven by GPS to prevent duplicate markers */}
+        {startCoords && !startCoords.isGps && (
           <Marker
             position={[startCoords.lat, startCoords.lng]}
             icon={createCustomIcon('start')}
@@ -309,9 +395,26 @@ export default function LeafletMapView({
           />
         </span>
         <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
-          {isLiveTracking ? 'Live location active' : 'OpenStreetMap & OSRM Live'}
+          {isLiveTracking
+            ? `🔵 Live Location Active${
+                userGpsCoords?.accuracy ? ` (±${Math.round(userGpsCoords.accuracy)}m)` : ''
+              }`
+            : 'OpenStreetMap & OSRM Live'}
         </span>
       </div>
+
+      {/* Floating Center on Live Location Button */}
+      {userGpsCoords && (
+        <button
+          type="button"
+          onClick={() => setReCenterTrigger((c) => c + 1)}
+          className="absolute bottom-6 right-4 z-20 flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white/95 px-3.5 py-2.5 text-xs font-bold text-slate-800 shadow-xl backdrop-blur-md transition hover:scale-105 hover:border-sky-300 hover:text-sky-600 dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:text-sky-400"
+          title="Center map on your live GPS position"
+        >
+          <Crosshair className="h-4 w-4 text-sky-500" />
+          <span>Center on Live Location</span>
+        </button>
+      )}
     </div>
   );
 }

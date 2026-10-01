@@ -53,6 +53,7 @@ export default function App() {
 
   // References to preserve latest values in continuous watch callbacks without stale closures
   const lastRoutedGpsRef = useRef(null);
+  const isReroutingRef = useRef(false);
   const destinationPlaceRef = useRef(destinationPlace);
   const travelModeRef = useRef(travelMode);
   const realRouteResultRef = useRef(realRouteResult);
@@ -270,13 +271,19 @@ export default function App() {
     setErrorMessage('');
   };
 
-  // Continuous Live GPS Location Tracking & Movement-Based Rerouting
+  // Stop continuous live GPS tracking and clear watch
+  const handleStopLiveLocation = () => {
+    stopLiveLocationWatch();
+    setIsLiveTracking(false);
+    setIsLocating(false);
+    // Preserves userGpsCoords and startPlace so the last position remains on the map as a static point
+  };
+
+  // Continuous Live GPS Location Tracking using watchPosition()
   const handleUseMyLocation = () => {
     // If currently tracking live, toggle tracking OFF
     if (isLiveTracking) {
-      stopLiveLocationWatch();
-      setIsLiveTracking(false);
-      setLocationError(null);
+      handleStopLiveLocation();
       return;
     }
 
@@ -284,18 +291,21 @@ export default function App() {
     setLocationError(null);
     setErrorMessage('');
 
-    let isInitialResolution = true;
+    let isInitialFix = true;
 
     startLiveLocationWatch(
       async (pos) => {
+        // Continuous state updates on every GPS tick
         setUserGpsCoords(pos);
         setIsLocating(false);
         setIsLiveTracking(true);
-        setLocationError(null); // Clear any permission error on success
+        setLocationError(null); // Clear any prior permission error
 
-        // On first GPS reading, reverse geocode to assign a meaningful address name
-        if (isInitialResolution) {
-          isInitialResolution = false;
+        // 1. Initial GPS fix: reverse geocode for a friendly name and trigger initial route if destination already selected
+        if (isInitialFix) {
+          isInitialFix = false;
+          lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
+
           try {
             const geo = await reverseGeocode(pos.lat, pos.lng);
             setStartPlace({
@@ -306,7 +316,6 @@ export default function App() {
               isGps: true,
             });
             setCurrentLocationName(geo.name || 'Live GPS Location');
-            lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
           } catch (e) {
             setStartPlace({
               name: 'My Current GPS Location',
@@ -314,34 +323,13 @@ export default function App() {
               lng: pos.lng,
               isGps: true,
             });
-            lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
           }
-          return;
-        }
 
-        // For subsequent continuous GPS updates:
-        // Update current location coordinates
-        setStartPlace((prev) =>
-          prev?.isGps ? { ...prev, lat: pos.lat, lng: pos.lng } : prev
-        );
-
-        // TASK 5: Live Location + Routing
-        // Check if there is an active destination and an existing route
-        const dest = destinationPlaceRef.current;
-        const activeRoute = realRouteResultRef.current;
-
-        if (dest && activeRoute) {
-          const lastRouted = lastRoutedGpsRef.current;
-          const movementMeters = lastRouted
-            ? calculateDistanceMeters(lastRouted.lat, lastRouted.lng, pos.lat, pos.lng)
-            : 100;
-
-          // Only recalculate OSRM when user moves significantly (threshold 40 meters)
-          // to prevent spamming public routing APIs (TASK 5 & TASK 7)
-          if (movementMeters >= 40) {
-            lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
-
+          // If user already has a destination selected, calculate initial route immediately
+          const dest = destinationPlaceRef.current;
+          if (dest && dest.lat && dest.lng) {
             try {
+              isReroutingRef.current = true;
               const result = await calculateOsrmRoute({
                 startLat: pos.lat,
                 startLng: pos.lng,
@@ -367,17 +355,106 @@ export default function App() {
                 algorithm: 'Open Source Routing Machine (OSRM)',
                 steps: result.steps,
               });
-            } catch (rerouteErr) {
-              console.warn('Live GPS auto-reroute skipped:', rerouteErr);
+            } catch (initErr) {
+              console.warn('Initial live route calculation skipped:', initErr);
+            } finally {
+              isReroutingRef.current = false;
             }
           }
+          return;
+        }
+
+        // 2. Subsequent continuous GPS updates:
+        // Update current location coordinates without triggering full address re-resolution
+        setStartPlace((prev) =>
+          prev?.isGps ? { ...prev, lat: pos.lat, lng: pos.lng } : prev
+        );
+
+        // 3. Live Navigation Rerouting with 40-Meter Movement Threshold
+        const dest = destinationPlaceRef.current;
+        // If NO destination is selected, do NOT call OSRM (Requirement 8 & 9)
+        if (!dest || !dest.lat || !dest.lng) {
+          return;
+        }
+
+        // Check if user has moved at least 40 meters from the last routed position
+        const lastRouted = lastRoutedGpsRef.current;
+        const movementMeters = lastRouted
+          ? calculateDistanceMeters(lastRouted.lat, lastRouted.lng, pos.lat, pos.lng)
+          : 999;
+
+        // If movement is under 40 meters, only the live marker position is updated
+        if (movementMeters < 40) {
+          return;
+        }
+
+        // Avoid concurrent requests if an OSRM calculation is already in-flight
+        if (isReroutingRef.current) {
+          return;
+        }
+
+        // User moved >= 40m: trigger OSRM recalculation
+        lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
+        isReroutingRef.current = true;
+
+        try {
+          const result = await calculateOsrmRoute({
+            startLat: pos.lat,
+            startLng: pos.lng,
+            endLat: dest.lat,
+            endLng: dest.lng,
+            mode: travelModeRef.current,
+          });
+
+          setRouteCoordinates(result.coordinates);
+          setRealRouteResult({
+            source: 'My Current Location',
+            destination: dest.name,
+            path: ['My Current Location', dest.name],
+            distance: result.distanceKm,
+            stopsCount: 2,
+            travelTime: result.formattedDuration,
+            segments: result.steps.map((st) => ({
+              from: st.instruction,
+              to: '',
+              distance: st.distance,
+              routeName: st.instruction,
+            })),
+            algorithm: 'Open Source Routing Machine (OSRM)',
+            steps: result.steps,
+          });
+        } catch (rerouteErr) {
+          console.warn('Live GPS auto-reroute skipped:', rerouteErr);
+        } finally {
+          isReroutingRef.current = false;
         }
       },
       (error) => {
-        setIsLocating(false);
-        setIsLiveTracking(false);
-        setLocationError(error);
-        setErrorMessage(error.friendlyMessage || error.message);
+        // Handle GPS errors according to Requirement 11
+        if (error.isPermissionDenied) {
+          stopLiveLocationWatch();
+          setIsLocating(false);
+          setIsLiveTracking(false);
+          setLocationError(error);
+          setErrorMessage(error.friendlyMessage || error.message);
+        } else if (error.isTransient) {
+          // If tracking was already running, do NOT terminate the watcher for temporary GPS timeout
+          if (!lastRoutedGpsRef.current) {
+            stopLiveLocationWatch();
+            setIsLocating(false);
+            setIsLiveTracking(false);
+            setLocationError(error);
+            setErrorMessage(error.friendlyMessage || error.message);
+          } else {
+            console.warn('Temporary GPS signal loss, continuing watch:', error.message);
+          }
+        } else {
+          stopLiveLocationWatch();
+          setIsLocating(false);
+          setIsLiveTracking(false);
+          setLocationError(error);
+          setErrorMessage(error.friendlyMessage || error.message);
+        }
       }
     );
   };
@@ -536,6 +613,7 @@ export default function App() {
         travelMode={travelMode}
         onTravelModeChange={setTravelMode}
         onUseMyLocation={handleUseMyLocation}
+        onStopLiveLocation={handleStopLiveLocation}
         isLocating={isLocating}
         isLiveTracking={isLiveTracking}
         locationError={locationError}
