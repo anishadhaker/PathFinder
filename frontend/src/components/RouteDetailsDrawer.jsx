@@ -199,11 +199,11 @@ export default function RouteDetailsDrawer({ isOpen, onClose, routeResult, darkM
             </div>
           </div>
 
-          {/* Academic & Viva Section */}
+          {/* Academic Algorithm & Complexity Section */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-850/70">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
               <BookOpen className="h-4 w-4 text-indigo-500" />
-              <span>B.Tech CSE Viva Explanation Note</span>
+              <span>Algorithm & Complexity Notes</span>
             </div>
 
             {isOsrm ? (
