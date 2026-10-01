@@ -14,6 +14,9 @@ import {
   Footprints,
   Bike,
   RotateCcw,
+  Play,
+  Pause,
+  Zap,
 } from 'lucide-react';
 import { CITIES } from '../data/graphData';
 import PlaceSearchInput from './PlaceSearchInput';
@@ -45,6 +48,19 @@ export default function NavigationPanel({
   destination,
   onSourceChange,
   onDestinationChange,
+  // Dijkstra playback controls
+  onRun,
+  onPause,
+  onResume,
+  onReset,
+  onRunInstantly,
+  isPlaying = false,
+  isPaused = false,
+  speed = 600,
+  onSpeedChange,
+  currentStep = null,
+  currentStepIndex = -1,
+  totalSteps = 0,
   // Shared actions
   onSwap,
   onCalculateRoute,
@@ -168,13 +184,13 @@ export default function NavigationPanel({
                   </p>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-sky-200/80 bg-sky-50/70 p-3 text-xs text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300">
+                <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-3 text-xs text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
                   <div className="flex items-center gap-1.5 font-bold">
-                    <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
-                    <span>Dijkstra Algorithm Demonstration</span>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Dijkstra Shortest Path</span>
                   </div>
                   <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                    Runs Dijkstra's Algorithm on your 10-city weighted road network (Jaipur → Udaipur = 395 km).
+                    Find the shortest path between two locations using Dijkstra's Algorithm.
                   </p>
                 </div>
               )}
@@ -344,12 +360,16 @@ export default function NavigationPanel({
                 </div>
               )}
 
-              {/* Primary Action Button: "Find Best Route" */}
+              {/* Primary Action Button */}
               <button
                 type="button"
                 onClick={onCalculateRoute}
                 disabled={isCalculating}
-                className="group relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-gradient-to-r from-sky-500 via-indigo-600 to-sky-600 p-3.5 text-sm font-bold text-white shadow-lg shadow-sky-500/25 transition hover:opacity-95 hover:shadow-sky-500/35 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-75"
+                className={`group relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-2xl p-3.5 text-sm font-bold text-white shadow-lg transition hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-75 ${
+                  appMode === 'dijkstra_demo'
+                    ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 shadow-emerald-600/25 hover:shadow-emerald-600/35'
+                    : 'bg-gradient-to-r from-sky-500 via-indigo-600 to-sky-600 shadow-sky-500/25 hover:shadow-sky-500/35'
+                }`}
               >
                 {isCalculating ? (
                   <>
@@ -363,10 +383,120 @@ export default function NavigationPanel({
                 ) : (
                   <>
                     <Navigation className="h-4 w-4 transition group-hover:translate-x-0.5" />
-                    <span>Find Best Route</span>
+                    <span>{appMode === 'real_world' ? 'Find Best Route' : 'Find Shortest Path'}</span>
                   </>
                 )}
               </button>
+
+              {/* Compact Dijkstra Playback & Step Controls */}
+              {appMode === 'dijkstra_demo' && (
+                <div className="space-y-2 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-850/50">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <span>Algorithm Playback</span>
+                    {totalSteps > 0 && (
+                      <span className="font-mono text-[10.5px] text-emerald-600 dark:text-emerald-400">
+                        Step {Math.max(currentStepIndex + 1, 1)} of {totalSteps}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Playback Buttons */}
+                  <div className="flex items-center gap-1.5">
+                    {!isPlaying && !isPaused ? (
+                      <button
+                        type="button"
+                        onClick={onRun}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition active:scale-95"
+                        title="Watch step-by-step relaxation animation"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-current" />
+                        <span>Run Animation</span>
+                      </button>
+                    ) : isPlaying ? (
+                      <button
+                        type="button"
+                        onClick={onPause}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-2 text-xs font-bold text-white shadow-sm hover:bg-amber-400 transition active:scale-95"
+                        title="Pause animation"
+                      >
+                        <Pause className="h-3.5 w-3.5 fill-current" />
+                        <span>Pause</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onResume}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition active:scale-95"
+                        title="Resume animation"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-current" />
+                        <span>Resume</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={onReset}
+                      className="flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750 transition"
+                      title="Reset algorithm state"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Reset</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={onRunInstantly}
+                      className="flex items-center justify-center gap-1 rounded-xl border border-sky-200 bg-sky-50 px-2.5 py-2 text-xs font-bold text-sky-700 shadow-sm hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300 transition"
+                      title="Skip animation and display final result immediately"
+                    >
+                      <Zap className="h-3.5 w-3.5 fill-current" />
+                      <span>Instant</span>
+                    </button>
+                  </div>
+
+                  {/* Speed Controls */}
+                  <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold">Speed:</span>
+                    <div className="flex items-center gap-1">
+                      {[
+                        { label: 'Slow', val: 1200 },
+                        { label: 'Normal', val: 600 },
+                        { label: 'Fast', val: 200 },
+                      ].map(({ label, val }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => onSpeedChange(val)}
+                          className={`rounded-lg px-2 py-0.5 font-bold text-[10px] transition ${
+                            speed === val
+                              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live Step Status Card */}
+                  {currentStep && (isPlaying || isPaused) && (
+                    <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 p-2.5 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                          {currentStep.stepTitle}
+                        </span>
+                        <span>#{currentStep.stepNumber}</span>
+                      </div>
+                      <p className="text-[11px] leading-snug text-slate-700 dark:text-slate-300">
+                        {currentStep.message}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Quick Network Popular Routes (In Demo Mode) */}
               {appMode === 'dijkstra_demo' && (
@@ -374,19 +504,19 @@ export default function NavigationPanel({
                   <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                     Sample Dijkstra Benchmarks
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
                     <button
                       type="button"
                       onClick={() => onSelectRecentSearch({ source: 'Jaipur', destination: 'Udaipur' })}
-                      className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2 text-left text-xs transition hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-800 dark:bg-slate-800/80 dark:hover:border-sky-500/40"
+                      className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2 text-left text-xs transition hover:border-emerald-300 hover:bg-emerald-50/40 dark:border-slate-800 dark:bg-slate-800/80 dark:hover:border-emerald-500/40"
                     >
                       <div>
                         <div className="font-semibold text-slate-800 dark:text-slate-200">
                           Jaipur → Udaipur
                         </div>
-                        <div className="text-[10px] text-slate-400">Ajmer corridor</div>
+                        <div className="text-[10px] text-slate-400">Via Ajmer corridor</div>
                       </div>
-                      <span className="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-600 dark:bg-sky-950/60 dark:text-sky-400">
+                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                         395 km
                       </span>
                     </button>
@@ -394,16 +524,32 @@ export default function NavigationPanel({
                     <button
                       type="button"
                       onClick={() => onSelectRecentSearch({ source: 'Delhi', destination: 'Agra' })}
-                      className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2 text-left text-xs transition hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-800 dark:bg-slate-800/80 dark:hover:border-sky-500/40"
+                      className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2 text-left text-xs transition hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-800 dark:bg-slate-800/80 dark:hover:border-sky-500/40"
                     >
                       <div>
                         <div className="font-semibold text-slate-800 dark:text-slate-200">
                           Delhi → Agra
                         </div>
-                        <div className="text-[10px] text-slate-400">Expressway</div>
+                        <div className="text-[10px] text-slate-400">Yamuna Expressway</div>
                       </div>
-                      <span className="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-600 dark:bg-sky-950/60 dark:text-sky-400">
+                      <span className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-black text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
                         230 km
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onSelectRecentSearch({ source: 'Delhi', destination: 'Jaipur' })}
+                      className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white p-2 text-left text-xs transition hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-800 dark:bg-slate-800/80 dark:hover:border-sky-500/40"
+                    >
+                      <div>
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          Delhi → Jaipur
+                        </div>
+                        <div className="text-[10px] text-slate-400">NH-48 Corridor</div>
+                      </div>
+                      <span className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-black text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
+                        280 km
                       </span>
                     </button>
                   </div>
