@@ -46,6 +46,7 @@ export default function NetworkMap({
   source,
   destination,
   activeRoute = null,
+  currentStep = null,
   activeTab = 'navigation',
   selectedCityForNearby = 'Jaipur',
   nearbyPlaces = [],
@@ -81,6 +82,15 @@ export default function NetworkMap({
       }
     }
     return false;
+  };
+
+  // Check if a road is actively being relaxed during Dijkstra playback
+  const isCurrentStepEdge = (from, to) => {
+    if (!currentStep?.activeEdge) return false;
+    return (
+      (currentStep.activeEdge.from === from && currentStep.activeEdge.to === to) ||
+      (currentStep.activeEdge.from === to && currentStep.activeEdge.to === from)
+    );
   };
 
   // Mouse pan handling

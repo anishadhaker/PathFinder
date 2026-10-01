@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CheckCircle2,
   Compass,
@@ -9,6 +9,9 @@ import {
   Sparkles,
   Route as RouteIcon,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  X,
 } from 'lucide-react';
 
 const formatDistanceWithUnit = (distanceValue) => {
@@ -27,6 +30,8 @@ export default function RouteResultCard({
   onResetRoute,
   darkMode = false,
 }) {
+  const [isMinimized, setIsMinimized] = useState(false);
+
   if (!routeResult) return null;
 
   const isOsrm = Boolean(
@@ -35,9 +40,46 @@ export default function RouteResultCard({
     routeResult.provider?.toLowerCase().includes('osrm')
   );
 
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto z-20 animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white/95 px-4 py-2.5 shadow-xl backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
+          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
+            <CheckCircle2 className="h-4 w-4" />
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+              {routeResult.source} → {routeResult.destination}
+            </span>
+            <span className="text-xs font-black text-sky-600 dark:text-sky-400">
+              {formatDistanceWithUnit(routeResult.distance)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMinimized(false)}
+            className="flex items-center gap-1 rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200"
+            title="Expand Route Card"
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+            <span>Details</span>
+          </button>
+          <button
+            type="button"
+            onClick={onResetRoute}
+            className="flex h-7 w-7 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            title="Reset Route"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[540px] z-30 animate-in fade-in slide-in-from-bottom-5 duration-300">
-      <div className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 p-5 shadow-2xl backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
+    <div className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[500px] lg:w-[540px] z-20 animate-in fade-in slide-in-from-bottom-5 duration-300">
+      <div className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 p-4 sm:p-5 shadow-2xl backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
         {/* Top Header & Status */}
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -61,12 +103,24 @@ export default function RouteResultCard({
             </div>
           </div>
 
-          <div className="text-right">
-            <div className="text-2xl font-black text-sky-600 dark:text-sky-400 leading-tight">
-              {formatDistanceWithUnit(routeResult.distance)}
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <div className="text-xl sm:text-2xl font-black text-sky-600 dark:text-sky-400 leading-tight">
+                {formatDistanceWithUnit(routeResult.distance)}
+              </div>
+              <div className="text-[9.5px] font-medium uppercase tracking-wider text-slate-400">
+                Total Distance
+              </div>
             </div>
-            <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
-              Total Distance
+            <div className="flex flex-col gap-1 pl-1">
+              <button
+                type="button"
+                onClick={() => setIsMinimized(true)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                title="Minimize card"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
