@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CITIES } from '../data/graphData';
 import { NEARBY_CATEGORIES } from '../data/nearbyPlacesData';
+import LocationPermissionAlert from './LocationPermissionAlert';
 
 const CategoryIcon = ({ category, className = 'h-4 w-4' }) => {
   switch (category) {
@@ -47,6 +48,10 @@ export default function NearbyPlacesPanel({
   onCityChange,
   onUseCurrentLocation,
   isDetectingLocation,
+  isLiveTracking = false,
+  locationError = null,
+  onOpenPermissionHelp,
+  onDismissLocationError,
   currentLocationName,
   selectedCategory,
   onCategoryChange,
@@ -97,10 +102,24 @@ export default function NearbyPlacesPanel({
             type="button"
             onClick={onUseCurrentLocation}
             disabled={isDetectingLocation}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 transition"
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold transition ${
+              isLiveTracking
+                ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
+                : 'text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300'
+            }`}
           >
-            <Crosshair className={`h-3 w-3 ${isDetectingLocation ? 'animate-spin' : ''}`} />
-            {isDetectingLocation ? 'Locating...' : 'Use Current Location'}
+            <Crosshair
+              className={`h-3 w-3 ${
+                isDetectingLocation ? 'animate-spin text-sky-500' : isLiveTracking ? 'animate-pulse text-emerald-500' : ''
+              }`}
+            />
+            <span>
+              {isDetectingLocation
+                ? 'Requesting your location...'
+                : isLiveTracking
+                ? 'Live Location (Active)'
+                : 'Use Current Location'}
+            </span>
           </button>
         </div>
 
@@ -127,6 +146,17 @@ export default function NearbyPlacesPanel({
             <CheckCircle2 className="h-3.5 w-3.5" />
             Active Hub: {currentLocationName}
           </div>
+        )}
+
+        {/* Location Permission & GPS Error Alert */}
+        {locationError && (
+          <LocationPermissionAlert
+            error={locationError}
+            onOpenHelp={onOpenPermissionHelp}
+            onRetry={onUseCurrentLocation}
+            onDismiss={onDismissLocationError}
+            darkMode={darkMode}
+          />
         )}
       </div>
 

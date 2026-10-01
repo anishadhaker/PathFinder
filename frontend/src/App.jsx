@@ -7,6 +7,7 @@ import RouteDetailsDrawer from './components/RouteDetailsDrawer';
 import AlgorithmProgress from './components/AlgorithmProgress';
 import MapControls from './components/MapControls';
 import NetworkStatus from './components/NetworkStatus';
+import LocationPermissionModal from './components/LocationPermissionModal';
 
 // Services
 import { calculateShortestPath } from './services/shortestPathService';
@@ -17,6 +18,8 @@ import {
   startLiveLocationWatch,
   stopLiveLocationWatch,
   calculateDistanceMeters,
+  checkLocationPermissionStatus,
+  subscribeToPermissionChanges,
 } from './services/geolocationService';
 import { reverseGeocode } from './services/nominatimService';
 import { CITIES } from './data/graphData';
@@ -45,6 +48,8 @@ export default function App() {
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [realRouteResult, setRealRouteResult] = useState(null);
   const [isLiveTracking, setIsLiveTracking] = useState(false);
+  const [locationError, setLocationError] = useState(null);
+  const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
 
   // References to preserve latest values in continuous watch callbacks without stale closures
   const lastRoutedGpsRef = useRef(null);
@@ -69,6 +74,31 @@ export default function App() {
     return () => {
       stopLiveLocationWatch();
     };
+  }, []);
+
+  // Subscribe to browser permission state changes (e.g., user enables permission in Chrome site settings)
+  useEffect(() => {
+    const unsubscribe = subscribeToPermissionChanges((newState) => {
+      if (newState === 'granted') {
+        setLocationError(null);
+        setErrorMessage('');
+      } else if (newState === 'denied') {
+        setLocationError((prev) =>
+          prev
+            ? {
+                ...prev,
+                isBlocked: true,
+                headline: 'Location access is blocked.',
+                friendlyMessage:
+                  'Please allow Location permission for this site in your browser settings, then refresh the page.',
+                actionText:
+                  'Click here to allow location access in your browser settings, then refresh the page.',
+              }
+            : null
+        );
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   // Dijkstra Demo State (10 Cities Graph)
@@ -246,10 +276,12 @@ export default function App() {
     if (isLiveTracking) {
       stopLiveLocationWatch();
       setIsLiveTracking(false);
+      setLocationError(null);
       return;
     }
 
     setIsLocating(true);
+    setLocationError(null);
     setErrorMessage('');
 
     let isInitialResolution = true;
@@ -259,6 +291,7 @@ export default function App() {
         setUserGpsCoords(pos);
         setIsLocating(false);
         setIsLiveTracking(true);
+        setLocationError(null); // Clear any permission error on success
 
         // On first GPS reading, reverse geocode to assign a meaningful address name
         if (isInitialResolution) {
@@ -343,7 +376,8 @@ export default function App() {
       (error) => {
         setIsLocating(false);
         setIsLiveTracking(false);
-        setErrorMessage(error.message);
+        setLocationError(error);
+        setErrorMessage(error.friendlyMessage || error.message);
       }
     );
   };

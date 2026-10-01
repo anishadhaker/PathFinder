@@ -459,6 +459,10 @@ export default function NavigationPanel({
               onCityChange={onCityChangeForNearby}
               onUseCurrentLocation={onUseCurrentLocation}
               isDetectingLocation={isDetectingLocation}
+              isLiveTracking={isLiveTracking}
+              locationError={locationError}
+              onOpenPermissionHelp={onOpenPermissionHelp}
+              onDismissLocationError={onDismissLocationError}
               currentLocationName={currentLocationName}
               selectedCategory={selectedCategory}
               onCategoryChange={onCategoryChange}
