@@ -538,6 +538,9 @@ export default function App() {
         onUseMyLocation={handleUseMyLocation}
         isLocating={isLocating}
         isLiveTracking={isLiveTracking}
+        locationError={locationError}
+        onOpenPermissionHelp={() => setIsPermissionModalOpen(true)}
+        onDismissLocationError={() => setLocationError(null)}
         // Dijkstra demo props
         source={source}
         destination={destination}
@@ -617,6 +620,18 @@ export default function App() {
         isOpen={isRouteDetailsOpen}
         onClose={() => setIsRouteDetailsOpen(false)}
         routeResult={currentActiveRoute}
+        darkMode={darkMode}
+      />
+
+      {/* 8. BROWSER LOCATION PERMISSION INSTRUCTIONS & HELP MODAL */}
+      <LocationPermissionModal
+        isOpen={isPermissionModalOpen}
+        onClose={() => setIsPermissionModalOpen(false)}
+        onRetry={() => {
+          setIsPermissionModalOpen(false);
+          handleUseMyLocation();
+        }}
+        isBlocked={locationError?.isBlocked || false}
         darkMode={darkMode}
       />
     </div>
