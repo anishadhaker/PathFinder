@@ -17,6 +17,7 @@ import {
   Play,
   Pause,
   Zap,
+  Globe2,
 } from 'lucide-react';
 import { CITIES } from '../data/graphData';
 import PlaceSearchInput from './PlaceSearchInput';
@@ -25,6 +26,7 @@ import LocationPermissionAlert from './LocationPermissionAlert';
 
 export default function NavigationPanel({
   appMode = 'real_world', // 'real_world' | 'dijkstra_demo'
+  onModeChange,
   activeTab,
   onTabChange,
   // Real-world search props
@@ -135,6 +137,37 @@ export default function NavigationPanel({
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
+        </div>
+
+        {/* SYSTEM MODE SELECTOR: Real-World Leaflet Map vs Academic Dijkstra */}
+        <div className="px-3 pt-2.5 pb-1">
+          <div className="grid grid-cols-2 rounded-2xl border border-slate-200/90 bg-slate-100/90 p-1 dark:border-slate-800 dark:bg-slate-800/90">
+            <button
+              type="button"
+              onClick={() => onModeChange && onModeChange('real_world')}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-1.5 text-xs font-bold transition-all ${
+                appMode === 'real_world'
+                  ? 'bg-sky-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
+            >
+              <Globe2 className="h-3.5 w-3.5" />
+              <span>Real-World Map</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onModeChange && onModeChange('dijkstra_demo')}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-1.5 text-xs font-bold transition-all ${
+                appMode === 'dijkstra_demo'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
+            >
+              <RouteIcon className="h-3.5 w-3.5" />
+              <span>Dijkstra Demo</span>
+            </button>
+          </div>
         </div>
 
         {/* NAVIGATION MODE TABS */}

@@ -15,6 +15,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -26,6 +35,14 @@ body {
   background:
     radial-gradient(circle at top left, rgba(14, 165, 233, 0.08), transparent 25%),
     linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%);
+}
+
+/* Ensure Leaflet map container has valid height and width */
+.leaflet-container {
+  height: 100% !important;
+  width: 100% !important;
+  z-index: 10;
+  outline: none;
 }
 
 * {

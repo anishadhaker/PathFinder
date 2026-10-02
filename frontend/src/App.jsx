@@ -28,8 +28,8 @@ import { reverseGeocode } from './services/nominatimService';
 import { CITIES } from './data/graphData';
 
 export default function App() {
-  // App Mode: PRIMARY Academic Dijkstra Mode vs Supporting Real-World Mode
-  const [appMode, setAppMode] = useState('dijkstra_demo');
+  // App Mode: Real-World Leaflet OpenStreetMap vs Academic Dijkstra Mode
+  const [appMode, setAppMode] = useState('real_world');
 
   // Navigation Mode Tab for Real-World: 'navigation' | 'nearby'
   const [activeTab, setActiveTab] = useState('navigation');
@@ -249,6 +249,41 @@ export default function App() {
   useEffect(() => {
     realRouteResultRef.current = realRouteResult;
   }, [realRouteResult]);
+
+  // Pre-calculate initial real-world route on mount so Leaflet map shows polyline immediately
+  useEffect(() => {
+    if (startPlace && destinationPlace) {
+      calculateOsrmRoute({
+        startLat: startPlace.lat,
+        startLng: startPlace.lng,
+        endLat: destinationPlace.lat,
+        endLng: destinationPlace.lng,
+        mode: travelMode,
+      })
+        .then((res) => {
+          setRouteCoordinates(res.coordinates);
+          setRealRouteResult({
+            source: startPlace.name,
+            destination: destinationPlace.name,
+            path: [startPlace.name, destinationPlace.name],
+            distance: res.distanceKm,
+            stopsCount: 2,
+            travelTime: res.formattedDuration,
+            segments: res.steps.map((st) => ({
+              from: st.instruction,
+              to: '',
+              distance: st.distance,
+              routeName: st.instruction,
+            })),
+            algorithm: 'Open Source Routing Machine (OSRM)',
+            steps: res.steps,
+          });
+        })
+        .catch((e) => {
+          console.warn('Initial OSRM route calculation deferred:', e.message);
+        });
+    }
+  }, []);
 
   // Clean up active geolocation watch on component unmount
   useEffect(() => {
@@ -632,8 +667,20 @@ export default function App() {
       )}
 
       {/* 2. TOP PRIMARY / DUAL-MODE SWITCHER */}
-      <div className="fixed top-4 left-4 sm:left-[435px] z-20 hidden md:flex items-center gap-3">
+      <div className="fixed top-4 left-4 sm:left-[435px] z-20 flex flex-wrap items-center gap-2 max-w-[calc(100vw-32px)]">
         <div className="flex items-center rounded-2xl border border-slate-200/90 bg-white/95 p-1 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
+          <button
+            type="button"
+            onClick={() => setAppMode('real_world')}
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+              appMode === 'real_world'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <Globe2 className="h-3.5 w-3.5" />
+            <span>Real-World Map (Leaflet & OSM)</span>
+          </button>
           <button
             type="button"
             onClick={() => setAppMode('dijkstra_demo')}
@@ -646,18 +693,6 @@ export default function App() {
             <RouteIcon className="h-3.5 w-3.5" />
             <span>Dijkstra Shortest Path</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setAppMode('real_world')}
-            className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-              appMode === 'real_world'
-                ? 'bg-slate-900 text-white shadow-sm dark:bg-sky-500 dark:text-white'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            <Globe2 className="h-3.5 w-3.5" />
-            <span>Real-World Navigation (OSM & OSRM)</span>
-          </button>
         </div>
 
         {appMode === 'dijkstra_demo' && <NetworkStatus darkMode={darkMode} />}
@@ -666,6 +701,7 @@ export default function App() {
       {/* 3. LEFT FLOATING NAVIGATION & NEARBY PANEL */}
       <NavigationPanel
         appMode={appMode}
+        onModeChange={setAppMode}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         // Real-world props

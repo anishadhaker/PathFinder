@@ -6,9 +6,11 @@ import {
   Popup,
   Polyline,
   Circle,
+  ZoomControl,
   useMap,
 } from 'react-leaflet';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   MapPin,
   Navigation,
@@ -25,6 +27,14 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+// Fix leaflet default marker icons in bundlers (Vite/Webpack)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
 // Custom Map Controller to smoothly re-center on start or fit route bounds without locking user pan
 function SmartMapController({
   center,
@@ -37,6 +47,15 @@ function SmartMapController({
   const map = useMap();
   const hasInitiallyCenteredRef = useRef(false);
   const prevRouteKeyRef = useRef('');
+
+  // 0. Ensure map tiles and container dimensions calculate properly on mount and resize
+  useEffect(() => {
+    map.invalidateSize();
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [map]);
 
   // 1. Initial center on user location when live tracking starts
   useEffect(() => {
@@ -197,6 +216,7 @@ export default function LeafletMapView({
         zoom={zoom}
         zoomControl={false}
         className="h-full w-full z-10"
+        style={{ height: '100%', width: '100%' }}
       >
         <SmartMapController
           center={mapCenter}
@@ -206,6 +226,9 @@ export default function LeafletMapView({
           isLiveTracking={isLiveTracking}
           reCenterTrigger={reCenterTrigger}
         />
+
+        {/* High-visibility map zoom controls */}
+        <ZoomControl position="bottomright" />
 
         {/* Tile Layer (OSM Light or CartoDB Dark Matter) */}
         <TileLayer
@@ -283,7 +306,7 @@ export default function LeafletMapView({
         )}
 
         {/* Start Point Marker: Rendered only when NOT driven by GPS to prevent duplicate markers */}
-        {startCoords && !startCoords.isGps && (
+        {startCoords && !startCoords.isGps && (!userGpsCoords || !startCoords.isCurrentLocation) && (
           <Marker
             position={[startCoords.lat, startCoords.lng]}
             icon={createCustomIcon('start')}
