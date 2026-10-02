@@ -27,8 +27,9 @@ const roadMap = [
   { from: 'Jodhpur', to: 'Udaipur', distance: 250 },
   { from: 'Jodhpur', to: 'Bikaner', distance: 250 },
   { from: 'Chandigarh', to: 'Amritsar', distance: 225 },
-  { from: 'Agra', to: 'Jaipur', distance: 310 },
-  { from: 'Kota', to: 'Ajmer', distance: 190 },
+  { from: 'Agra', to: 'Kota', distance: 380 },
+  { from: 'Agra', to: 'Jaipur', distance: 240 },
+  { from: 'Kota', to: 'Ajmer', distance: 205 },
 ];
 
 function getLineCoordinates(from, to) {

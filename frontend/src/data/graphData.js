@@ -1,5 +1,5 @@
 // Graph data for PathFinder - Smart Shortest Path & Nearby Places Navigation System
-// 10 Main Locations and 14 Weighted Roads (Weights in km)
+// 10 Main Locations and 16 Weighted Roads (Weights in km)
 
 export const CITIES = [
   'Delhi',
@@ -109,10 +109,12 @@ export const CITY_NODES = {
 };
 
 // Configurable Highway Distances (km)
-// Edit this constant to customize the distance between Agra and Kota:
+// Edit these constants to customize distance weights:
 export const AGRA_KOTA_DISTANCE_KM = 380;
+export const AGRA_JAIPUR_DISTANCE_KM = 240;
+export const AJMER_KOTA_DISTANCE_KM = 205;
 
-// 14 Weighted Bidirectional Roads:
+// 16 Weighted Bidirectional Roads:
 export const ROADS = [
   { from: 'Delhi', to: 'Jaipur', distance: 280, routeName: 'NH-48 Golden Quadrilateral' },
   { from: 'Delhi', to: 'Agra', distance: 230, routeName: 'Yamuna Expressway / NH-19' },
@@ -128,6 +130,8 @@ export const ROADS = [
   { from: 'Jodhpur', to: 'Bikaner', distance: 250, routeName: 'NH-62 Desert Highway' },
   { from: 'Chandigarh', to: 'Amritsar', distance: 225, routeName: 'NH-3 GT North Spur' },
   { from: 'Agra', to: 'Kota', distance: AGRA_KOTA_DISTANCE_KM, routeName: 'NH-23 / NH-552 Chambal Link' },
+  { from: 'Agra', to: 'Jaipur', distance: AGRA_JAIPUR_DISTANCE_KM, routeName: 'NH-21 Golden Triangle Highway' },
+  { from: 'Ajmer', to: 'Kota', distance: AJMER_KOTA_DISTANCE_KM, routeName: 'NH-148D Hadoti-Aravalli Link' },
 ];
 
 // Fictional Cartographic Elements for original map design

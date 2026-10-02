@@ -5,9 +5,11 @@
 #include <string>
 #include <vector>
 
-// Configurable default highway distance for the Agra <-> Kota connection (in km).
-// Edit this value to configure the distance in the C++ implementation:
+// Configurable default highway distances for sample city network (in km).
+// Edit these values to configure the distances in the C++ implementation:
 const int DEFAULT_AGRA_KOTA_DISTANCE_KM = 380;
+const int DEFAULT_AGRA_JAIPUR_DISTANCE_KM = 240;
+const int DEFAULT_AJMER_KOTA_DISTANCE_KM = 205;
 
 struct Road {
     std::string destination;
@@ -28,7 +30,9 @@ public:
     void setRoadDistance(const std::string& source, const std::string& destination, int distanceKm);
     void displayLocations() const;
     void displayRoads() const;
-    void loadSampleCityNetwork(int agraKotaDistanceKm = DEFAULT_AGRA_KOTA_DISTANCE_KM);
+    void loadSampleCityNetwork(int agraKotaDistanceKm = DEFAULT_AGRA_KOTA_DISTANCE_KM,
+                               int agraJaipurDistanceKm = DEFAULT_AGRA_JAIPUR_DISTANCE_KM,
+                               int ajmerKotaDistanceKm = DEFAULT_AJMER_KOTA_DISTANCE_KM);
     bool findShortestPath(const std::string& source,
                           const std::string& destination,
                           int& shortestDistance,

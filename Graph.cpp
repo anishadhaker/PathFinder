@@ -127,7 +127,9 @@ void Graph::displayRoads() const {
     }
 }
 
-void Graph::loadSampleCityNetwork(int agraKotaDistanceKm) {
+void Graph::loadSampleCityNetwork(int agraKotaDistanceKm,
+                                  int agraJaipurDistanceKm,
+                                  int ajmerKotaDistanceKm) {
     // 10 Academic Regional City Network Nodes
     addLocation("Delhi");
     addLocation("Jaipur");
@@ -140,7 +142,8 @@ void Graph::loadSampleCityNetwork(int agraKotaDistanceKm) {
     addLocation("Chandigarh");
     addLocation("Amritsar");
 
-    // 14 Bidirectional Weighted Highway Corridors (Distances in km)
+    // 16 Bidirectional Weighted Highway Corridors (Distances in km)
+    // Existing base connections (weights unchanged):
     addRoad("Delhi", "Jaipur", 280);
     addRoad("Delhi", "Agra", 230);
     addRoad("Delhi", "Chandigarh", 245);
@@ -157,6 +160,13 @@ void Graph::loadSampleCityNetwork(int agraKotaDistanceKm) {
 
     // Bidirectional road connection between Agra and Kota with configurable distance
     addRoad("Agra", "Kota", agraKotaDistanceKm);
+
+    // Additional connections between geographically nearby neighboring cities:
+    // Agra <-> Jaipur (NH-21 Golden Triangle Highway corridor, ~240 km):
+    addRoad("Agra", "Jaipur", agraJaipurDistanceKm);
+
+    // Ajmer <-> Kota (NH-148D Hadoti-Aravalli expressway, ~205 km):
+    addRoad("Ajmer", "Kota", ajmerKotaDistanceKm);
 }
 
 bool Graph::findShortestPath(const std::string& source,

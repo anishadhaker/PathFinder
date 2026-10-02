@@ -12,6 +12,8 @@ export const cities = [
 ];
 
 export const AGRA_KOTA_DISTANCE_KM = 380;
+export const AGRA_JAIPUR_DISTANCE_KM = 240;
+export const AJMER_KOTA_DISTANCE_KM = 205;
 
 export const networkEdges = [
   { from: 'Delhi', to: 'Jaipur', distance: 280 },
@@ -27,9 +29,9 @@ export const networkEdges = [
   { from: 'Jodhpur', to: 'Udaipur', distance: 250 },
   { from: 'Jodhpur', to: 'Bikaner', distance: 250 },
   { from: 'Chandigarh', to: 'Amritsar', distance: 225 },
-  { from: 'Agra', to: 'Jaipur', distance: 310 },
-  { from: 'Kota', to: 'Ajmer', distance: 190 },
   { from: 'Agra', to: 'Kota', distance: AGRA_KOTA_DISTANCE_KM },
+  { from: 'Agra', to: 'Jaipur', distance: AGRA_JAIPUR_DISTANCE_KM },
+  { from: 'Kota', to: 'Ajmer', distance: AJMER_KOTA_DISTANCE_KM },
 ];
 
 export const routeLookup = {
