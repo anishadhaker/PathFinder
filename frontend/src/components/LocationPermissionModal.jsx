@@ -150,7 +150,7 @@ export default function LocationPermissionModal({
                 </span>
                 <div className="text-xs text-slate-700 dark:text-slate-300">
                   <span className="font-bold text-slate-900 dark:text-white">
-                    Refresh the page &amp; Click &quot;Use My Location&quot;
+                    Refresh the page &amp; Click &quot;Use ocation&quot;
                   </span>
                   <p className="mt-0.5 text-slate-500 dark:text-slate-400">
                     Click the <strong>Refresh Page</strong> button below (or press{' '}
