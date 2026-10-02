@@ -42,6 +42,7 @@ export default function NavigationPanel({
   onStopLiveLocation,
   isLocating = false,
   isLiveTracking = false,
+  isSourceCurrentLocation = true,
   locationError = null,
   onOpenPermissionHelp,
   onDismissLocationError,
@@ -237,19 +238,20 @@ export default function NavigationPanel({
                 {appMode === 'real_world' ? (
                   <>
                     <PlaceSearchInput
-                    label="Starting Point"
-                    placeholder="Search address, landmark, college..."
-                    selectedPlace={startPlace}
-                    onSelectPlace={onSelectStartPlace}
-                    onClear={onClearStartPlace}
-                    badgeText="A"
-                    badgeColor="bg-emerald-500"
-                    showGpsButton={true}
-                    onUseGps={onUseMyLocation}
-                    onStopLiveLocation={onStopLiveLocation}
-                    isLocating={isLocating}
-                    isLiveTracking={isLiveTracking}
-                  />
+                      label="Starting Point"
+                      placeholder="Search address, landmark, college..."
+                      selectedPlace={startPlace}
+                      onSelectPlace={onSelectStartPlace}
+                      onClear={onClearStartPlace}
+                      badgeText="A"
+                      badgeColor="bg-emerald-500"
+                      showGpsButton={true}
+                      onUseGps={onUseMyLocation}
+                      onStopLiveLocation={onStopLiveLocation}
+                      isLocating={isLocating}
+                      isLiveTracking={isLiveTracking}
+                      isSourceCurrentLocation={isSourceCurrentLocation}
+                    />
 
                   {/* Location Permission & GPS Error Alert */}
                   {locationError && (

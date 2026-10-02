@@ -79,9 +79,10 @@ export const fetchNearbyPlacesOsm = async ({ lat, lng, category = 'all', radius 
   `;
 
   // Attempt live Overpass query with a strict 7-second timeout
+  let timeoutId;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000);
+    timeoutId = setTimeout(() => controller.abort(), 7000);
 
     const response = await fetch(OVERPASS_ENDPOINTS[0], {
       method: 'POST',
@@ -91,8 +92,6 @@ export const fetchNearbyPlacesOsm = async ({ lat, lng, category = 'all', radius 
       },
       signal: controller.signal,
     });
-
-    clearTimeout(timeoutId);
 
     if (response.ok) {
       const data = await response.json();
@@ -132,7 +131,13 @@ export const fetchNearbyPlacesOsm = async ({ lat, lng, category = 'all', radius 
       }
     }
   } catch (err) {
-    console.info('Overpass API live query timed out or throttled, using local curated dataset.', err.message);
+    if (err?.name === 'AbortError') {
+      console.info('Overpass API live query timed out or was aborted; using local curated dataset.');
+    } else {
+      console.info('Overpass API live query failed; using local curated dataset.', err?.message || err);
+    }
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   // Graceful Fallback: Curated local dataset

@@ -169,8 +169,24 @@ export default function App() {
   const handleSwap = () => {
     if (appMode === 'real_world') {
       const temp = startPlace;
-      setStartPlace(destinationPlace);
-      setDestinationPlace(temp);
+      const newStart = destinationPlace;
+      const newDest = temp;
+
+      const newStartIsCurrentLocation = Boolean(newStart?.isCurrentLocation);
+      setIsSourceCurrentLocation(newStartIsCurrentLocation);
+      isSourceCurrentLocationRef.current = newStartIsCurrentLocation;
+      lastRoutedGpsRef.current = null;
+
+      setStartPlace(newStart);
+      setDestinationPlace(newDest);
+      destinationPlaceRef.current = newDest;
+
+      if (newStart?.lat && newStart?.lng && newDest?.lat && newDest?.lng) {
+        calculateAndSetRoute(newStart, newDest, travelModeRef.current);
+      } else {
+        setRouteCoordinates([]);
+        setRealRouteResult(null);
+      }
     } else {
       const tempSource = source;
       const tempDest = destination;
@@ -213,10 +229,14 @@ export default function App() {
   // 2. REAL-WORLD NAVIGATION & LIVE GPS STATE
   // ==========================================
   const [startPlace, setStartPlace] = useState({
-    name: 'Jaipur, Rajasthan',
-    lat: 26.9124,
-    lng: 75.7873,
+    name: 'My Current Location',
+    lat: null,
+    lng: null,
+    isCurrentLocation: true,
   });
+  const [isSourceCurrentLocation, setIsSourceCurrentLocation] = useState(true);
+  const isSourceCurrentLocationRef = useRef(true);
+
   const [destinationPlace, setDestinationPlace] = useState({
     name: 'Udaipur, Rajasthan',
     lat: 24.5854,
@@ -250,39 +270,69 @@ export default function App() {
     realRouteResultRef.current = realRouteResult;
   }, [realRouteResult]);
 
-  // Pre-calculate initial real-world route on mount so Leaflet map shows polyline immediately
-  useEffect(() => {
-    if (startPlace && destinationPlace) {
-      calculateOsrmRoute({
-        startLat: startPlace.lat,
-        startLng: startPlace.lng,
-        endLat: destinationPlace.lat,
-        endLng: destinationPlace.lng,
-        mode: travelMode,
-      })
-        .then((res) => {
-          setRouteCoordinates(res.coordinates);
-          setRealRouteResult({
-            source: startPlace.name,
-            destination: destinationPlace.name,
-            path: [startPlace.name, destinationPlace.name],
-            distance: res.distanceKm,
-            stopsCount: 2,
-            travelTime: res.formattedDuration,
-            segments: res.steps.map((st) => ({
-              from: st.instruction,
-              to: '',
-              distance: st.distance,
-              routeName: st.instruction,
-            })),
-            algorithm: 'Open Source Routing Machine (OSRM)',
-            steps: res.steps,
-          });
-        })
-        .catch((e) => {
-          console.warn('Initial OSRM route calculation deferred:', e.message);
-        });
+  // Unified helper to calculate and apply OSRM route
+  const calculateAndSetRoute = async (src, dest, mode = travelModeRef.current) => {
+    if (!src?.lat || !src?.lng || !dest?.lat || !dest?.lng) {
+      return null;
     }
+    setIsCalculating(true);
+    setErrorMessage('');
+    try {
+      const result = await calculateOsrmRoute({
+        startLat: src.lat,
+        startLng: src.lng,
+        endLat: dest.lat,
+        endLng: dest.lng,
+        mode,
+      });
+
+      setRouteCoordinates(result.coordinates);
+      const newRoute = {
+        source: src.name || 'My Current Location',
+        destination: dest.name,
+        path: [src.name || 'My Current Location', dest.name],
+        distance: result.distanceKm,
+        stopsCount: 2,
+        travelTime: result.formattedDuration,
+        segments: result.steps.map((st) => ({
+          from: st.instruction,
+          to: '',
+          distance: st.distance,
+          routeName: st.instruction,
+        })),
+        algorithm: 'Open Source Routing Machine (OSRM)',
+        steps: result.steps,
+      };
+      setRealRouteResult(newRoute);
+
+      if (src.name && dest.name) {
+        setRecentSearches((prev) => [
+          {
+            source: src.name,
+            destination: dest.name,
+            distance: result.distanceKm,
+            startLat: src.lat,
+            startLng: src.lng,
+            destLat: dest.lat,
+            destLng: dest.lng,
+          },
+          ...prev.filter((item) => !(item.source === src.name && item.destination === dest.name)).slice(0, 4),
+        ]);
+      }
+      return newRoute;
+    } catch (err) {
+      setRouteCoordinates([]);
+      setRealRouteResult(null);
+      setErrorMessage(err.message || 'Routing failed. Please try a different location.');
+      return null;
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  // Requirement 1: On application open, request browser location and set current location as default source
+  useEffect(() => {
+    handleUseMyLocation();
   }, []);
 
   // Clean up active geolocation watch on component unmount
@@ -351,16 +401,17 @@ export default function App() {
     }
   }, [darkMode]);
 
+  const nearbyCenterLat = Number((userGpsCoords?.lat ?? startPlace?.lat ?? 26.9124).toFixed(2));
+  const nearbyCenterLng = Number((userGpsCoords?.lng ?? startPlace?.lng ?? 75.7873).toFixed(2));
+
   // Fetch Nearby Places when category or center changes
   useEffect(() => {
     let isCancelled = false;
-    const centerLat = userGpsCoords?.lat || startPlace?.lat || 26.9124;
-    const centerLng = userGpsCoords?.lng || startPlace?.lng || 75.7873;
 
     setIsFetchingNearby(true);
     fetchNearbyPlacesOsm({
-      lat: centerLat,
-      lng: centerLng,
+      lat: nearbyCenterLat,
+      lng: nearbyCenterLng,
       category: selectedCategory,
     })
       .then((places) => {
@@ -378,66 +429,28 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [selectedCategory, startPlace, userGpsCoords]);
+  }, [selectedCategory, nearbyCenterLat, nearbyCenterLng]);
 
   // Handle Route Calculation
   const handleCalculateRoute = async () => {
     setErrorMessage('');
-    setIsCalculating(true);
-
     if (appMode === 'real_world') {
-      if (!startPlace || !destinationPlace) {
-        setErrorMessage('Please enter and select both a starting location and destination.');
-        setIsCalculating(false);
+      if (!startPlace?.lat || !startPlace?.lng) {
+        if (isLocating) {
+          setErrorMessage('Acquiring current location. Please wait a moment...');
+        } else {
+          setErrorMessage('Please specify a starting location or enable location access.');
+        }
         return;
       }
-
-      try {
-        const result = await calculateOsrmRoute({
-          startLat: startPlace.lat,
-          startLng: startPlace.lng,
-          endLat: destinationPlace.lat,
-          endLng: destinationPlace.lng,
-          mode: travelMode,
-        });
-
-        setRouteCoordinates(result.coordinates);
-        setRealRouteResult({
-          source: startPlace.name,
-          destination: destinationPlace.name,
-          path: [startPlace.name, destinationPlace.name],
-          distance: result.distanceKm,
-          stopsCount: 2,
-          travelTime: result.formattedDuration,
-          segments: result.steps.map((st) => ({
-            from: st.instruction,
-            to: '',
-            distance: st.distance,
-            routeName: st.instruction,
-          })),
-          algorithm: 'Open Source Routing Machine (OSRM)',
-          steps: result.steps,
-        });
-
-        setRecentSearches((prev) => [
-          {
-            source: startPlace.name,
-            destination: destinationPlace.name,
-            distance: result.distanceKm,
-          },
-          ...prev.slice(0, 5),
-        ]);
-      } catch (err) {
-        setRouteCoordinates([]);
-        setRealRouteResult(null);
-        setErrorMessage(err.message || 'Routing failed. Please try a different location.');
-      } finally {
-        setIsCalculating(false);
+      if (!destinationPlace?.lat || !destinationPlace?.lng) {
+        setErrorMessage('Please select a destination location.');
+        return;
       }
+      calculateAndSetRoute(startPlace, destinationPlace, travelMode);
     } else {
       // Dijkstra Demo Mode
       handleRunInstantly();
-      setIsCalculating(false);
     }
   };
 
@@ -449,11 +462,33 @@ export default function App() {
     lastRoutedGpsRef.current = null;
   };
 
-  // Continuous Live GPS Location Tracking
+  // Continuous Live GPS Location Tracking (Requirements 1, 3, 4, 6)
   const handleUseMyLocation = () => {
     setLocationError(null);
     setErrorMessage('');
     setIsLocating(true);
+    setIsSourceCurrentLocation(true);
+    isSourceCurrentLocationRef.current = true;
+    lastRoutedGpsRef.current = null;
+
+    // Immediately set "My Current Location" as the displayed source
+    setStartPlace((prev) => ({
+      name: 'My Current Location',
+      lat: userGpsCoords?.lat ?? (prev?.isCurrentLocation ? prev?.lat : null),
+      lng: userGpsCoords?.lng ?? (prev?.isCurrentLocation ? prev?.lng : null),
+      accuracy: userGpsCoords?.accuracy ?? null,
+      isCurrentLocation: true,
+    }));
+    setCurrentLocationName('My Current Location');
+
+    // If coordinates are already cached and destination exists, calculate route immediately
+    if (userGpsCoords?.lat && userGpsCoords?.lng && destinationPlace?.lat && destinationPlace?.lng) {
+      calculateAndSetRoute(
+        { name: 'My Current Location', lat: userGpsCoords.lat, lng: userGpsCoords.lng, isCurrentLocation: true },
+        destinationPlace,
+        travelModeRef.current
+      );
+    }
 
     startLiveLocationWatch(
       async (pos) => {
@@ -466,143 +501,135 @@ export default function App() {
           timestamp: pos.timestamp,
         });
 
-        let placeName = 'My Current Location';
-        try {
-          placeName = await reverseGeocode(pos.lat, pos.lng);
-        } catch (e) {
-          console.warn('Reverse geocoding failed:', e);
-        }
+        // Requirement 3 & 4: Only update source and reroute if source is "My Current Location"
+        if (isSourceCurrentLocationRef.current) {
+          const currentPlace = {
+            name: 'My Current Location',
+            lat: pos.lat,
+            lng: pos.lng,
+            accuracy: pos.accuracy,
+            isCurrentLocation: true,
+          };
+          setStartPlace(currentPlace);
+          setCurrentLocationName('My Current Location');
 
-        const newStartPlace = {
-          name: placeName,
-          lat: pos.lat,
-          lng: pos.lng,
-          accuracy: pos.accuracy,
-          isCurrentLocation: true,
-        };
-        setStartPlace(newStartPlace);
-        setCurrentLocationName(placeName);
+          const dest = destinationPlaceRef.current;
+          if (!dest || !dest.lat || !dest.lng) return;
 
-        const dest = destinationPlaceRef.current;
-        if (!dest) return;
-
-        let shouldReroute = false;
-        if (!lastRoutedGpsRef.current) {
-          shouldReroute = true;
-        } else {
-          const movedMeters = calculateDistanceMeters(
-            lastRoutedGpsRef.current.lat,
-            lastRoutedGpsRef.current.lng,
-            pos.lat,
-            pos.lng
-          );
-          if (movedMeters > 40) {
+          let shouldReroute = false;
+          if (!lastRoutedGpsRef.current) {
             shouldReroute = true;
+          } else {
+            const movedMeters = calculateDistanceMeters(
+              lastRoutedGpsRef.current.lat,
+              lastRoutedGpsRef.current.lng,
+              pos.lat,
+              pos.lng
+            );
+            // Requirement 4: Movement threshold to prevent excessive requests
+            if (movedMeters >= 40) {
+              shouldReroute = true;
+            }
           }
-        }
 
-        if (!shouldReroute || isReroutingRef.current) return;
+          if (!shouldReroute || isReroutingRef.current) return;
 
-        isReroutingRef.current = true;
-        lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
+          isReroutingRef.current = true;
+          lastRoutedGpsRef.current = { lat: pos.lat, lng: pos.lng };
 
-        try {
-          const result = await calculateOsrmRoute({
-            startLat: pos.lat,
-            startLng: pos.lng,
-            endLat: dest.lat,
-            endLng: dest.lng,
-            mode: travelModeRef.current,
-          });
-
-          setRouteCoordinates(result.coordinates);
-          setRealRouteResult({
-            source: 'My Current Location',
-            destination: dest.name,
-            path: ['My Current Location', dest.name],
-            distance: result.distanceKm,
-            stopsCount: 2,
-            travelTime: result.formattedDuration,
-            segments: result.steps.map((st) => ({
-              from: st.instruction,
-              to: '',
-              distance: st.distance,
-              routeName: st.instruction,
-            })),
-            algorithm: 'Open Source Routing Machine (OSRM)',
-            steps: result.steps,
-          });
-        } catch (rerouteErr) {
-          console.warn('Live GPS auto-reroute skipped:', rerouteErr);
-        } finally {
-          isReroutingRef.current = false;
+          try {
+            await calculateAndSetRoute(currentPlace, dest, travelModeRef.current);
+          } catch (rerouteErr) {
+            console.warn('Live GPS auto-reroute skipped:', rerouteErr);
+          } finally {
+            isReroutingRef.current = false;
+          }
         }
       },
       (error) => {
-        if (error.isPermissionDenied) {
-          stopLiveLocationWatch();
-          setIsLocating(false);
-          setIsLiveTracking(false);
-          setLocationError(error);
-          setErrorMessage(error.friendlyMessage || error.message);
-        } else if (error.isTransient) {
-          if (!lastRoutedGpsRef.current) {
-            stopLiveLocationWatch();
-            setIsLocating(false);
-            setIsLiveTracking(false);
-            setLocationError(error);
-            setErrorMessage(error.friendlyMessage || error.message);
-          } else {
-            console.warn('Temporary GPS signal loss, continuing watch:', error.message);
-          }
-        } else {
-          stopLiveLocationWatch();
-          setIsLocating(false);
-          setIsLiveTracking(false);
-          setLocationError(error);
-          setErrorMessage(error.friendlyMessage || error.message);
+        stopLiveLocationWatch();
+        setIsLocating(false);
+        setIsLiveTracking(false);
+        setLocationError(error);
+        setErrorMessage(error.friendlyMessage || error.message);
+        // Requirement 6: Do not silently substitute a fixed location! Keep null so user can type manually.
+        if (isSourceCurrentLocationRef.current) {
+          setStartPlace(null);
         }
       }
     );
   };
 
-  // Navigate to a Nearby Place
+  // Requirement 3: Manual selection of starting point (stops automatic GPS overwrite)
+  const handleSelectStartPlace = (place) => {
+    setIsSourceCurrentLocation(false);
+    isSourceCurrentLocationRef.current = false;
+    lastRoutedGpsRef.current = null;
+    const newPlace = place ? { ...place, isCurrentLocation: false } : null;
+    setStartPlace(newPlace);
+    if (newPlace?.lat && newPlace?.lng && destinationPlace?.lat && destinationPlace?.lng) {
+      calculateAndSetRoute(newPlace, destinationPlace, travelMode);
+    } else {
+      setRouteCoordinates([]);
+      setRealRouteResult(null);
+    }
+  };
+
+  // Clear starting point
+  const handleClearStartPlace = () => {
+    setIsSourceCurrentLocation(false);
+    isSourceCurrentLocationRef.current = false;
+    lastRoutedGpsRef.current = null;
+    setStartPlace(null);
+    setRouteCoordinates([]);
+    setRealRouteResult(null);
+  };
+
+  // Requirement 2: Changing destination MUST NOT reset or replace source, does not request location again
+  const handleSelectDestinationPlace = (dest) => {
+    setDestinationPlace(dest);
+    destinationPlaceRef.current = dest;
+    lastRoutedGpsRef.current = null;
+    if (startPlace?.lat && startPlace?.lng && dest?.lat && dest?.lng) {
+      calculateAndSetRoute(startPlace, dest, travelMode);
+    } else {
+      setRouteCoordinates([]);
+      setRealRouteResult(null);
+    }
+  };
+
+  // Clear destination (source stays untouched)
+  const handleClearDestinationPlace = () => {
+    setDestinationPlace(null);
+    destinationPlaceRef.current = null;
+    lastRoutedGpsRef.current = null;
+    setRouteCoordinates([]);
+    setRealRouteResult(null);
+  };
+
+  // Travel Mode Change
+  const handleTravelModeChange = (newMode) => {
+    setTravelMode(newMode);
+    travelModeRef.current = newMode;
+    if (appMode === 'real_world' && startPlace?.lat && destinationPlace?.lat) {
+      calculateAndSetRoute(startPlace, destinationPlace, newMode);
+    }
+  };
+
+  // Navigate to a Nearby Place (Preserves source as "My Current Location")
   const handleNavigateToNearbyPlace = (place) => {
     if (appMode === 'real_world') {
-      setDestinationPlace({
+      const newDest = {
         name: place.name,
         lat: place.lat,
         lng: place.lng,
-      });
+      };
+      setDestinationPlace(newDest);
+      destinationPlaceRef.current = newDest;
       setActiveTab('navigation');
-      if (startPlace) {
-        calculateOsrmRoute({
-          startLat: startPlace.lat,
-          startLng: startPlace.lng,
-          endLat: place.lat,
-          endLng: place.lng,
-          mode: travelMode,
-        })
-          .then((res) => {
-            setRouteCoordinates(res.coordinates);
-            setRealRouteResult({
-              source: startPlace.name,
-              destination: place.name,
-              path: [startPlace.name, place.name],
-              distance: res.distanceKm,
-              stopsCount: 2,
-              travelTime: res.formattedDuration,
-              segments: res.steps.map((st) => ({
-                from: st.instruction,
-                to: '',
-                distance: st.distance,
-                routeName: st.instruction,
-              })),
-              algorithm: 'Open Source Routing Machine (OSRM)',
-              steps: res.steps,
-            });
-          })
-          .catch((err) => setErrorMessage(err.message));
+      lastRoutedGpsRef.current = null;
+      if (startPlace?.lat && startPlace?.lng) {
+        calculateAndSetRoute(startPlace, newDest, travelMode);
       }
     } else {
       const target = place.graphNode || 'Jaipur';
@@ -639,7 +666,13 @@ export default function App() {
           onNavigateToNearbyPlace={handleNavigateToNearbyPlace}
           darkMode={darkMode}
           mapCenter={
-            startPlace ? [startPlace.lat, startPlace.lng] : [26.9124, 75.7873]
+            startPlace?.lat != null && startPlace?.lng != null
+              ? [startPlace.lat, startPlace.lng]
+              : userGpsCoords?.lat != null && userGpsCoords?.lng != null
+                ? [userGpsCoords.lat, userGpsCoords.lng]
+                : destinationPlace?.lat != null && destinationPlace?.lng != null
+                  ? [destinationPlace.lat, destinationPlace.lng]
+                  : [26.9124, 75.7873]
           }
           zoom={12}
         />
@@ -707,16 +740,17 @@ export default function App() {
         // Real-world props
         startPlace={startPlace}
         destinationPlace={destinationPlace}
-        onSelectStartPlace={setStartPlace}
-        onSelectDestinationPlace={setDestinationPlace}
-        onClearStartPlace={() => setStartPlace(null)}
-        onClearDestinationPlace={() => setDestinationPlace(null)}
+        onSelectStartPlace={handleSelectStartPlace}
+        onSelectDestinationPlace={handleSelectDestinationPlace}
+        onClearStartPlace={handleClearStartPlace}
+        onClearDestinationPlace={handleClearDestinationPlace}
         travelMode={travelMode}
-        onTravelModeChange={setTravelMode}
+        onTravelModeChange={handleTravelModeChange}
         onUseMyLocation={handleUseMyLocation}
         onStopLiveLocation={handleStopLiveLocation}
         isLocating={isLocating}
         isLiveTracking={isLiveTracking}
+        isSourceCurrentLocation={isSourceCurrentLocation}
         locationError={locationError}
         onOpenPermissionHelp={() => setIsPermissionModalOpen(true)}
         onDismissLocationError={() => setLocationError(null)}
@@ -749,8 +783,26 @@ export default function App() {
         recentSearches={recentSearches}
         onSelectRecentSearch={(item) => {
           if (appMode === 'real_world') {
-            setStartPlace({ name: item.source, lat: 26.9124, lng: 75.7873 });
-            setDestinationPlace({ name: item.destination, lat: 24.5854, lng: 73.7125 });
+            const src = {
+              name: item.source,
+              lat: item.startLat || (item.source === 'Jaipur' ? 26.9124 : 28.6139),
+              lng: item.startLng || (item.source === 'Jaipur' ? 75.7873 : 77.2090),
+              isCurrentLocation: false,
+            };
+            const dest = {
+              name: item.destination,
+              lat: item.destLat || (item.destination === 'Udaipur' ? 24.5854 : 27.1767),
+              lng: item.destLng || (item.destination === 'Udaipur' ? 73.7125 : 78.0081),
+            };
+            setIsSourceCurrentLocation(false);
+            isSourceCurrentLocationRef.current = false;
+            lastRoutedGpsRef.current = null;
+            setStartPlace(src);
+            setDestinationPlace(dest);
+            destinationPlaceRef.current = dest;
+            if (src.lat && dest.lat) {
+              calculateAndSetRoute(src, dest, travelModeRef.current);
+            }
           } else {
             setSource(item.source);
             setDestination(item.destination);

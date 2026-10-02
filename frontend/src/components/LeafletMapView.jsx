@@ -90,7 +90,7 @@ function SmartMapController({
 
   // 4. Default centering when NOT live tracking and route is not active
   useEffect(() => {
-    if (!isLiveTracking && (!routeBounds || !routeBounds.isValid()) && center) {
+    if (!isLiveTracking && (!routeBounds || !routeBounds.isValid()) && center && center[0] != null && center[1] != null) {
       map.setView(center, zoom || 13, { animate: true });
     }
   }, [center, zoom, isLiveTracking, routeBounds, map]);
@@ -209,17 +209,27 @@ export default function LeafletMapView({
       ? L.latLngBounds(routeCoordinates.map(([lat, lng]) => [lat, lng]))
       : null;
 
+  // Compute safe center coordinates
+  const safeCenter =
+    mapCenter && mapCenter[0] != null && mapCenter[1] != null
+      ? mapCenter
+      : userGpsCoords?.lat != null && userGpsCoords?.lng != null
+        ? [userGpsCoords.lat, userGpsCoords.lng]
+        : destinationCoords?.lat != null && destinationCoords?.lng != null
+          ? [destinationCoords.lat, destinationCoords.lng]
+          : [26.9124, 75.7873];
+
   return (
     <div className="relative h-full w-full">
       <MapContainer
-        center={mapCenter}
+        center={safeCenter}
         zoom={zoom}
         zoomControl={false}
         className="h-full w-full z-10"
         style={{ height: '100%', width: '100%' }}
       >
         <SmartMapController
-          center={mapCenter}
+          center={safeCenter}
           zoom={zoom}
           routeBounds={routeBounds}
           userGpsCoords={userGpsCoords}
@@ -239,7 +249,7 @@ export default function LeafletMapView({
         />
 
         {/* User Live GPS Marker & Accuracy Circle - Single live-location marker */}
-        {userGpsCoords && (
+        {userGpsCoords && userGpsCoords.lat != null && userGpsCoords.lng != null && (
           <>
             {userGpsCoords.accuracy && userGpsCoords.accuracy < 2500 && (
               <Circle
@@ -306,7 +316,7 @@ export default function LeafletMapView({
         )}
 
         {/* Start Point Marker: Rendered only when NOT driven by GPS to prevent duplicate markers */}
-        {startCoords && !startCoords.isGps && (!userGpsCoords || !startCoords.isCurrentLocation) && (
+        {startCoords && startCoords.lat != null && startCoords.lng != null && !startCoords.isGps && (!userGpsCoords || !startCoords.isCurrentLocation) && (
           <Marker
             position={[startCoords.lat, startCoords.lng]}
             icon={createCustomIcon('start')}
@@ -323,7 +333,7 @@ export default function LeafletMapView({
         )}
 
         {/* Destination Point Marker */}
-        {destinationCoords && (
+        {destinationCoords && destinationCoords.lat != null && destinationCoords.lng != null && (
           <Marker
             position={[destinationCoords.lat, destinationCoords.lng]}
             icon={createCustomIcon('destination')}

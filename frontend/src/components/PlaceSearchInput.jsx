@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, Crosshair, X, Loader2 } from 'lucide-react';
 import { searchPlaces } from '../services/nominatimService';
 
+const getPlaceLabel = (place) => {
+  if (typeof place?.name === 'string' && place.name) {
+    return place.name;
+  }
+  return typeof place?.displayName === 'string' ? place.displayName : '';
+};
+
 export default function PlaceSearchInput({
   label,
   placeholder,
@@ -15,8 +22,9 @@ export default function PlaceSearchInput({
   onStopLiveLocation,
   isLocating = false,
   isLiveTracking = false,
+  isSourceCurrentLocation = true,
 }) {
-  const [query, setQuery] = useState(selectedPlace ? selectedPlace.name : '');
+  const [query, setQuery] = useState(() => getPlaceLabel(selectedPlace));
   const [suggestions, setSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -24,30 +32,27 @@ export default function PlaceSearchInput({
 
   // Sync internal text when selectedPlace changes from outside (e.g. GPS or Swap)
   useEffect(() => {
-    if (selectedPlace) {
-      setQuery(selectedPlace.name || selectedPlace.displayName || '');
-    } else {
-      setQuery('');
-    }
+    setQuery(getPlaceLabel(selectedPlace));
   }, [selectedPlace]);
 
   // Debounced search on query changes
   useEffect(() => {
-    if (!query || query.trim().length < 2) {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length < 2) {
       setSuggestions([]);
       setIsLoading(false);
       return;
     }
 
     // If query matches current selection, don't trigger search
-    if (selectedPlace && query === (selectedPlace.name || selectedPlace.displayName)) {
+    if (selectedPlace && query === getPlaceLabel(selectedPlace)) {
       return;
     }
 
     const timer = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const results = await searchPlaces(query);
+        const results = await searchPlaces(trimmedQuery);
         setSuggestions(results);
         setIsOpen(results.length > 0);
       } catch (err) {
@@ -72,7 +77,7 @@ export default function PlaceSearchInput({
   }, []);
 
   const handleSelect = (place) => {
-    setQuery(place.name);
+    setQuery(getPlaceLabel(place));
     setIsOpen(false);
     onSelectPlace(place);
   };
@@ -98,7 +103,12 @@ export default function PlaceSearchInput({
 
         {showGpsButton && (
           <div>
-            {isLiveTracking ? (
+            {isLocating ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 dark:text-sky-400">
+                <Loader2 className="h-3 w-3 animate-spin text-sky-500" />
+                <span>Requesting your location...</span>
+              </span>
+            ) : isLiveTracking && isSourceCurrentLocation ? (
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 dark:text-sky-400">
                   <span className="relative flex h-2 w-2">
@@ -119,21 +129,16 @@ export default function PlaceSearchInput({
                   </button>
                 )}
               </div>
-            ) : isLocating ? (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 dark:text-sky-400">
-                <Loader2 className="h-3 w-3 animate-spin text-sky-500" />
-                <span>Requesting your location...</span>
-              </span>
             ) : (
               <button
                 type="button"
                 onClick={onUseGps}
                 disabled={isLocating}
                 className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 hover:text-sky-700 transition focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg px-1.5 py-0.5 dark:text-sky-400 dark:hover:text-sky-300"
-                title="Start continuous GPS live tracking"
+                title="Restore your current GPS location as the starting point"
               >
                 <Crosshair className="h-3 w-3 text-sky-500" />
-                <span>Use My Location</span>
+                <span>Use My Current Location</span>
               </button>
             )}
           </div>
