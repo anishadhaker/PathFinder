@@ -42,6 +42,47 @@ void Graph::addRoad(const std::string& source, const std::string& destination, i
     adjacencyList[destination].push_back({source, distanceKm});
 }
 
+void Graph::setRoadDistance(const std::string& source, const std::string& destination, int distanceKm) {
+    if (distanceKm <= 0) {
+        std::cout << "Road distance must be greater than 0 km.\n";
+        return;
+    }
+
+    if (!locationExists(source)) {
+        addLocation(source);
+    }
+
+    if (!locationExists(destination)) {
+        addLocation(destination);
+    }
+
+    // Update forward edge or add if not present
+    bool forwardFound = false;
+    for (auto& road : adjacencyList[source]) {
+        if (road.destination == destination) {
+            road.distanceKm = distanceKm;
+            forwardFound = true;
+            break;
+        }
+    }
+    if (!forwardFound) {
+        adjacencyList[source].push_back({destination, distanceKm});
+    }
+
+    // Update reverse edge or add if not present (bidirectional)
+    bool reverseFound = false;
+    for (auto& road : adjacencyList[destination]) {
+        if (road.destination == source) {
+            road.distanceKm = distanceKm;
+            reverseFound = true;
+            break;
+        }
+    }
+    if (!reverseFound) {
+        adjacencyList[destination].push_back({source, distanceKm});
+    }
+}
+
 void Graph::displayLocations() const {
     std::cout << "\nLocations in the city network:\n";
 
@@ -86,7 +127,7 @@ void Graph::displayRoads() const {
     }
 }
 
-void Graph::loadSampleCityNetwork() {
+void Graph::loadSampleCityNetwork(int agraKotaDistanceKm) {
     // 10 Academic Regional City Network Nodes
     addLocation("Delhi");
     addLocation("Jaipur");
@@ -99,7 +140,7 @@ void Graph::loadSampleCityNetwork() {
     addLocation("Chandigarh");
     addLocation("Amritsar");
 
-    // 13 Bidirectional Weighted Highway Corridors (Distances in km)
+    // 14 Bidirectional Weighted Highway Corridors (Distances in km)
     addRoad("Delhi", "Jaipur", 280);
     addRoad("Delhi", "Agra", 230);
     addRoad("Delhi", "Chandigarh", 245);
@@ -113,6 +154,9 @@ void Graph::loadSampleCityNetwork() {
     addRoad("Jodhpur", "Udaipur", 250);
     addRoad("Jodhpur", "Bikaner", 250);
     addRoad("Chandigarh", "Amritsar", 225);
+
+    // Bidirectional road connection between Agra and Kota with configurable distance
+    addRoad("Agra", "Kota", agraKotaDistanceKm);
 }
 
 bool Graph::findShortestPath(const std::string& source,

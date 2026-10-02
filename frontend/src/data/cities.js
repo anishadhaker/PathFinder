@@ -11,6 +11,8 @@ export const cities = [
   'Amritsar',
 ];
 
+export const AGRA_KOTA_DISTANCE_KM = 380;
+
 export const networkEdges = [
   { from: 'Delhi', to: 'Jaipur', distance: 280 },
   { from: 'Delhi', to: 'Agra', distance: 230 },
@@ -27,6 +29,7 @@ export const networkEdges = [
   { from: 'Chandigarh', to: 'Amritsar', distance: 225 },
   { from: 'Agra', to: 'Jaipur', distance: 310 },
   { from: 'Kota', to: 'Ajmer', distance: 190 },
+  { from: 'Agra', to: 'Kota', distance: AGRA_KOTA_DISTANCE_KM },
 ];
 
 export const routeLookup = {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Activity, ShieldCheck, MapPin, Route } from 'lucide-react';
+import { ROADS } from '../data/graphData';
 
 export default function NetworkStatus({ darkMode = false }) {
   return (
@@ -25,7 +26,7 @@ export default function NetworkStatus({ darkMode = false }) {
 
       <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-400">
         <Route className="h-3.5 w-3.5 text-sky-500" />
-        <span>13 Roads</span>
+        <span>{ROADS.length} Roads</span>
       </div>
 
       <div className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
