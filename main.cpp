@@ -33,9 +33,7 @@ int main() {
         std::cout << "Select an option: ";
 
         std::string choice;
-        std::getline(std::cin, choice);
-
-        if (choice == "0") {
+        if (!std::getline(std::cin, choice) || choice == "0") {
             std::cout << "\nThank you for using the navigation system.\n";
             break;
         }

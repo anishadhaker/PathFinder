@@ -29,7 +29,7 @@ The system combines:
 - **Real-World Road Routing**: Street-accurate navigation across global road networks using OSRM.
 - **Dual Mode Navigation**:
   1. *Real-World Mode*: OpenStreetMap, Nominatim search, OSRM routing, and live Overpass POIs.
-  2. *Academic Dijkstra Mode*: Interactive SVG canvas visualizing 10 regional cities and 13 weighted highway corridors.
+  2. *Academic Dijkstra Mode*: Interactive SVG canvas visualizing 10 regional cities and 14 weighted highway corridors.
 - **Continuous Live GPS Tracking**: Browser `navigator.geolocation.watchPosition()` with accuracy circles and automatic rerouting after significant device movement (30–50 meter threshold).
 - **Address & Landmark Autocomplete**: Debounced, cached search for cities, universities, hospitals, restaurants, and addresses.
 - **Multi-Modal Travel Support**: Driving, Walking (5 km/h speed adjustment), and Cycling (15 km/h speed adjustment) with realistic ETAs.
@@ -171,30 +171,78 @@ g++ -std=c++11 main.cpp Graph.cpp -o main.exe
 
 ## 8. Academic Dijkstra Verification Example
 
-The synchronized academic network contains 10 regional nodes and 13 bidirectional weighted highways:
+The synchronized academic network contains 10 regional nodes and 14 bidirectional weighted highways (including the direct, configurable Agra ↔ Kota link):
 
 ```
-[Delhi] ---- 280 km ---- [Jaipur] ---- 135 km ---- [Ajmer] ---- 260 km ---- [Udaipur]
-   |                        |                         |                         |
- 245 km                   250 km                    210 km                    290 km
-   |                        |                         |                         |
-[Chandigarh]              [Kota] -----------------------------------------------+
-   |
- 225 km
-   |
-[Amritsar]
+                     [Delhi] -------- 230 km -------- [Agra]
+                    /   |   \                            |
+             245 km/ 280 km  \450 km                     |
+                  /     |     \                          |
+        [Chandigarh] [Jaipur]  [Bikaner]                 | 380 km
+            |          /  \        |                     | (configurable)
+          225 km 135 km/    \330 km|250 km               |
+            |        /      \      |                     |
+        [Amritsar] [Ajmer]   [Jodhpur]                   |
+                    |   \     /    |                     |
+              260 km| 210 km/      |250 km               |
+                    |     \/       |                     |
+                    +--- [Udaipur] +                     |
+                            |                            |
+                          290 km                         |
+                            |                            |
+                          [Kota] ------------------------+
 ```
 
-### Verified Test Case:
-- **Source**: `Jaipur`
-- **Destination**: `Udaipur`
-- **Computed Shortest Path**: `Jaipur → Ajmer → Udaipur`
-- **Segment Distances**: `135 km` + `260 km`
-- **Total Distance**: **`395 km`**
+### Complete Network Connections (14 Bidirectional Roads):
+1. **Delhi ↔ Jaipur**: 280 km (NH-48 Golden Quadrilateral)
+2. **Delhi ↔ Agra**: 230 km (Yamuna Expressway / NH-19)
+3. **Delhi ↔ Chandigarh**: 245 km (NH-44 Grand Trunk Corridor)
+4. **Delhi ↔ Bikaner**: 450 km (NH-11 Desert Arterial)
+5. **Jaipur ↔ Ajmer**: 135 km (NH-48 Jaipur-Ajmer Expressway)
+6. **Jaipur ↔ Kota**: 250 km (NH-52 Chambal Link)
+7. **Jaipur ↔ Jodhpur**: 330 km (NH-25 Marwar Transit)
+8. **Ajmer ↔ Udaipur**: 260 km (NH-58 Mewar Express)
+9. **Ajmer ↔ Jodhpur**: 210 km (NH-25 Ajmer-Pali Spur)
+10. **Kota ↔ Udaipur**: 290 km (NH-27 East-West Arterial)
+11. **Jodhpur ↔ Udaipur**: 250 km (NH-62 Ranakpur Corridor)
+12. **Jodhpur ↔ Bikaner**: 250 km (NH-62 Desert Highway)
+13. **Chandigarh ↔ Amritsar**: 225 km (NH-3 GT North Spur)
+14. **Agra ↔ Kota**: 380 km (NH-23 / NH-552 Chambal Link — *Configurable*)
 
-Alternative paths evaluated and rejected by Dijkstra:
-- `Jaipur → Kota → Udaipur` = 250 + 290 = **540 km** (Sub-optimal)
-- `Jaipur → Jodhpur → Udaipur` = 330 + 250 = **580 km** (Sub-optimal)
+### Where to Configure the Agra ↔ Kota Road Distance:
+
+The Agra ↔ Kota edge weight is designed to be fully configurable:
+
+- **C++ Backend**:
+  - **Default Constant**: In `Graph.h`, edit:
+    ```cpp
+    const int DEFAULT_AGRA_KOTA_DISTANCE_KM = 380;
+    ```
+  - **At Network Load Time**: Pass custom distance: `graph.loadSampleCityNetwork(customKm);`
+  - **At Runtime**: Call `graph.setRoadDistance("Agra", "Kota", customKm);`
+- **Frontend Web Visualizer**:
+  - **In `frontend/src/data/graphData.js`**: Edit the exported constant:
+    ```javascript
+    export const AGRA_KOTA_DISTANCE_KM = 380;
+    ```
+  - **In `frontend/src/data/cities.js`**: Edit the exported constant:
+    ```javascript
+    export const AGRA_KOTA_DISTANCE_KM = 380;
+    ```
+
+### Verified Test Cases:
+
+1. **Direct Bidirectional Connection**:
+   - `Agra → Kota`: **380 km** (Direct)
+   - `Kota → Agra`: **380 km** (Direct)
+
+2. **Route Comparison — Delhi → Kota**:
+   - Via Jaipur: `Delhi → Jaipur → Kota` = 280 + 250 = **530 km** (Default Shortest Path)
+   - Via Agra: `Delhi → Agra → Kota` = 230 + 380 = **610 km** (Alternative Path evaluated by Dijkstra)
+   - *Note*: If Agra ↔ Kota is configured to $< 300\text{ km}$ (e.g. 250 km), Dijkstra automatically flips the optimal path to `Delhi → Agra → Kota` (480 km).
+
+3. **Existing Route Integrity**:
+   - `Jaipur → Udaipur`: `Jaipur → Ajmer → Udaipur` = 135 + 260 = **395 km** (Preserved)
 
 ---
 
